@@ -1,0 +1,66 @@
+repos:
+  # Python formatting and linting
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3
+        files: ^services/.*\.py$
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        name: isort (python)
+        files: ^services/.*\.py$
+        args: [--profile, black, --line-length, "88"]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.0.0
+    hooks:
+      - id: flake8
+        files: ^services/.*\.py$
+        args: [--max-line-length, "88", --extend-ignore, "E203,W503"]
+
+  # TypeScript/JavaScript formatting and linting
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.56.0
+    hooks:
+      - id: eslint
+        files: ^apps/web/.*\.(js|jsx|ts|tsx)$
+        types: [file]
+        additional_dependencies:
+          - eslint@8.56.0
+          - "@typescript-eslint/eslint-plugin@6.21.0"
+          - "@typescript-eslint/parser@6.21.0"
+          - "eslint-config-next@14.0.3"
+
+  # General code quality
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=10240']  # 10MB limit
+      - id: check-merge-conflict
+      - id: check-json
+      - id: pretty-format-json
+        args: ['--autofix', '--indent', '2']
+
+  # Security checks
+  - repo: https://github.com/pycqa/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        files: ^services/.*\.py$
+        args: [-lll, --skip, "B101,B601"]
+
+  # Secrets detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package.lock.json

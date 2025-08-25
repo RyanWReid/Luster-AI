@@ -8,3 +8,28 @@ python-dotenv
 pillow
 openai>=1.0.0
 requests>=2.31.0
+
+# Database migrations
+alembic
+
+# Task queue (better than Celery)
+rq
+redis
+
+# Monitoring and logging
+sentry-sdk[fastapi]
+structlog
+prometheus-client
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+httpx
+faker
+
+# Code quality
+black
+isort
+flake8
+mypy
