@@ -1,0 +1,432 @@
+import React, { useState } from 'react'
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TextInput,
+  TouchableOpacity,
+  FlatList,
+  Image,
+  Dimensions,
+} from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { LinearGradient } from 'expo-linear-gradient'
+import Svg, { Path, Circle } from 'react-native-svg'
+import { useNavigation } from '@react-navigation/native'
+
+const { width } = Dimensions.get('window')
+
+// Default property image
+const defaultPropertyImage = require('../../assets/photo.png')
+
+// Luster logo for button
+const lusterWhiteLogo = require('../../assets/luster-white-logo.png')
+
+// Search icon
+const SearchIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+      stroke="#9CA3AF"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+// Star icon for the main button
+const StarIcon = () => (
+  <Svg width={28} height={28} viewBox="0 0 24 24" fill="white">
+    <Path
+      d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+      fill="white"
+    />
+  </Svg>
+)
+
+// Settings icon
+const SettingsIcon = ({ color = '#9CA3AF' }: { color?: string }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 15a3 3 0 100-6 3 3 0 000 6z"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+// Mock data for properties
+const mockProperties = [
+  {
+    id: '1',
+    address: '1234 King Blvd',
+    price: '$550,000',
+    beds: 5,
+    baths: 4,
+    image: defaultPropertyImage,
+  },
+  {
+    id: '2',
+    address: '789 Queen Street',
+    price: '$425,000',
+    beds: 3,
+    baths: 2,
+    image: defaultPropertyImage,
+  },
+  {
+    id: '3',
+    address: '456 Park Avenue',
+    price: '$750,000',
+    beds: 4,
+    baths: 3,
+    image: defaultPropertyImage,
+  },
+]
+
+type FilterTag = 'Newest' | 'Oldest' | 'Beds' | 'Baths'
+
+export default function DashboardScreen() {
+  const navigation = useNavigation()
+  const [selectedFilter, setSelectedFilter] = useState<FilterTag>('Newest')
+  const [searchText, setSearchText] = useState('')
+
+  const filterTags: FilterTag[] = ['Newest', 'Oldest', 'Beds', 'Baths']
+
+  const handleEnhancePhoto = () => {
+    // Navigate to new listing screen
+    navigation.navigate('NewListing' as never)
+  }
+
+  const handleProfile = () => {
+    // Navigate to profile/settings screen
+    console.log('Navigate to profile')
+    // navigation.navigate('Profile' as never)
+  }
+
+  const renderPropertyCard = ({ item }: { item: typeof mockProperties[0] }) => (
+    <TouchableOpacity style={styles.propertyCard} activeOpacity={0.9}>
+      <Image source={item.image} style={styles.propertyImage} />
+      <View style={styles.propertyInfo}>
+        <Text style={styles.propertyAddress}>{item.address}</Text>
+        <View style={styles.propertyDetails}>
+          <Text style={styles.propertyPrice}>{item.price}</Text>
+          <Text style={styles.propertySpecs}>
+            {item.beds} Bed   {item.baths} Bath
+          </Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  )
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>Dashboard</Text>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={handleProfile}
+          >
+            <SettingsIcon color="#6B7280" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <SearchIcon />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search"
+            placeholderTextColor="#9CA3AF"
+            value={searchText}
+            onChangeText={setSearchText}
+          />
+        </View>
+
+        {/* Filter Tags */}
+        <View style={styles.filterContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps='handled'
+            contentContainerStyle={styles.filterContent}
+          >
+            {filterTags.map((tag) => (
+              <TouchableOpacity
+                key={tag}
+                style={[
+                  styles.filterTag,
+                  selectedFilter === tag && styles.filterTagActive,
+                ]}
+                onPress={() => setSelectedFilter(tag)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.filterTagText,
+                    selectedFilter === tag && styles.filterTagTextActive,
+                  ]}
+                  allowFontScaling={false}
+                  numberOfLines={1}
+                >
+                  {tag}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Property List */}
+        <FlatList
+          data={mockProperties}
+          renderItem={renderPropertyCard}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
+
+      {/* Custom Bottom Navigation */}
+      <View style={styles.bottomNavWrapper}>
+        <LinearGradient
+          colors={['#DFDEDE', '#FFC039']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.bottomNav}
+        >
+          <View style={styles.bottomNavContent}>
+            {/* Empty space on left for balance */}
+            <View style={styles.bottomNavSpacer} />
+
+            {/* Spacer for center button */}
+            <View style={{ width: 64 }} />
+
+            {/* Settings Button */}
+            <TouchableOpacity
+              style={styles.bottomNavButton}
+              onPress={handleProfile}
+            >
+              <SettingsIcon color="white" />
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+
+        {/* Center Enhance Button - Outside gradient to avoid clipping */}
+        <TouchableOpacity
+          onPress={handleEnhancePhoto}
+          activeOpacity={0.8}
+          style={styles.enhanceButtonContainer}
+        >
+          <LinearGradient
+            colors={['#8B5CF6', '#EC4899']}  // Purple to pink gradient
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}  // Diagonal gradient
+            style={styles.enhanceButton}
+          >
+            <Image source={lusterWhiteLogo} style={styles.lusterLogo} />
+          </LinearGradient>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  content: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    paddingBottom: 20,
+  },
+  settingsButton: {
+    padding: 4,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#111827',
+  },
+  filterContainer: {
+    height: 60, // Fixed height for ScrollView
+    maxHeight: 60,
+    marginBottom: 20,
+  },
+  filterContent: {
+    paddingHorizontal: 24,
+    alignItems: 'center', // Center items vertically
+    paddingVertical: 10,
+  },
+  filterTag: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    marginRight: 12,
+    height: 40, // Fixed height
+    justifyContent: 'center', // Center text vertically
+    alignItems: 'center', // Center text horizontally
+  },
+  filterTagActive: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+    borderWidth: 1,
+  },
+  filterTagText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#374151', // Darker gray for better visibility
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  filterTagTextActive: {
+    color: '#78350F', // Even darker brown for active state
+    fontWeight: '700',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    marginHorizontal: 24,
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  searchInput: {
+    flex: 1,
+    marginLeft: 12,
+    fontSize: 16,
+    color: '#111827',
+  },
+  listContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 100,
+  },
+  propertyCard: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  propertyImage: {
+    width: '100%',
+    height: 200,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  propertyInfo: {
+    padding: 16,
+  },
+  propertyAddress: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  propertyDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  propertyPrice: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  propertySpecs: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  bottomNavWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    overflow: 'visible', // Allow button to float
+  },
+  bottomNav: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 20, // Reduced from 34 (40% less) - still accounts for home indicator
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 10,
+    overflow: 'hidden', // Ensure gradient respects border radius
+  },
+  bottomNavContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12, // Reduced from 20 (40% less)
+    paddingBottom: 8,  // Reduced from 12 (40% less)
+    paddingHorizontal: 24,
+    position: 'relative',
+  },
+  bottomNavSpacer: {
+    width: 40,
+  },
+  bottomNavButton: {
+    padding: 8,
+  },
+  enhanceButtonContainer: {
+    position: 'absolute',
+    left: '50%',
+    transform: [{ translateX: -32 }],
+    bottom: 28, // Adjusted for shorter nav height
+  },
+  enhanceButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#8B5CF6',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  lusterLogo: {
+    width: 28,
+    height: 28,
+    resizeMode: 'contain',
+  },
+})

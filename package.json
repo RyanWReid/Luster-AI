@@ -11,7 +11,7 @@
     "dev:web": "cd apps/web && npm run dev",
     "setup": "npm run setup:api && npm run setup:worker && npm run setup:web && npm run setup:hooks",
     "setup:api": "cd services/api && pip install -r requirements.txt",
-    "setup:worker": "cd services/worker && pip install -r requirements.txt", 
+    "setup:worker": "cd services/worker && pip install -r requirements.txt",
     "setup:web": "cd apps/web && npm install",
     "setup:hooks": "pip install pre-commit && pre-commit install",
     "test": "npm run test:api && npm run test:web",
@@ -28,5 +28,8 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0"
   }
 }
