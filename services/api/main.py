@@ -3,6 +3,7 @@ import os
 import shutil
 import time
 import uuid
+import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -12,6 +13,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sqlalchemy.orm import Session
@@ -49,7 +51,7 @@ app.add_middleware(LoggingMiddleware)
 # CORS middleware for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js dev server
+    allow_origins=["*"],  # Allow all origins for mobile development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,6 +66,11 @@ Path(OUTPUTS_DIR).mkdir(parents=True, exist_ok=True)
 
 # Default user ID for local development (matches schema.sql)
 DEFAULT_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
+
+# Pydantic models for mobile API
+class Base64ImageRequest(BaseModel):
+    image: str  # Base64 encoded image
+    style: str = "luster"
 
 
 @app.get("/health")
@@ -85,7 +92,7 @@ def health_check():
 
     # Check Redis/Queue
     try:
-        from queue import get_queue_info, redis_health_check
+        from job_queue import get_queue_info, redis_health_check
 
         redis_status = redis_health_check()
         queue_info = get_queue_info()
@@ -231,7 +238,7 @@ def create_job(
 
     # Enqueue job for processing
     try:
-        from queue import enqueue_job
+        from job_queue import enqueue_job
 
         from services.worker.job_processor import (get_job_priority,
                                                    process_image_enhancement)
@@ -360,6 +367,278 @@ def get_credits(db: Session = Depends(get_db)):
     """Get user credit balance"""
     credit = db.query(Credit).filter(Credit.user_id == DEFAULT_USER_ID).first()
     return {"balance": credit.balance if credit else 0}
+
+
+# Mobile API endpoints
+@app.get("/api/mobile/test")
+def mobile_test():
+    """Test endpoint for mobile connectivity"""
+    return {"status": "connected", "message": "Mobile API is working"}
+
+
+@app.post("/api/mobile/enhance")
+async def mobile_enhance(
+    image: UploadFile = File(...),
+    style: str = Form("luster"),
+    db: Session = Depends(get_db),
+):
+    """Mobile endpoint to start image enhancement"""
+    
+    print(f"\n=== MOBILE ENHANCE DEBUG ===")
+    print(f"Style: {style}")
+    print(f"File: {image.filename}")
+    print(f"Content type: {image.content_type}")
+    
+    # Get or create mobile shoot
+    user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
+    if not user:
+        # Create default user if not exists
+        user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
+        db.add(user)
+        db.commit()
+    
+    mobile_shoot = db.query(Shoot).filter(
+        Shoot.user_id == user.id,
+        Shoot.name == "Mobile Uploads"
+    ).first()
+    
+    if not mobile_shoot:
+        mobile_shoot = Shoot(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            name="Mobile Uploads"
+        )
+        db.add(mobile_shoot)
+        db.flush()
+    
+    # Save uploaded file
+    file_content = await image.read()
+    print(f"File content size: {len(file_content)} bytes")
+    
+    if len(file_content) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    
+    # Generate unique filename with mobile prefix
+    file_ext = os.path.splitext(image.filename)[1] if image.filename else ".jpg"
+    unique_filename = f"mobile_{uuid.uuid4()}{file_ext}"
+    file_path = os.path.join(UPLOADS_DIR, unique_filename)
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        buffer.write(file_content)
+    
+    file_size = os.path.getsize(file_path)
+    print(f"File saved: {file_path}, size: {file_size} bytes")
+    
+    # Create asset
+    asset = Asset(
+        shoot_id=mobile_shoot.id,
+        user_id=user.id,
+        original_filename=image.filename or "photo.jpg",
+        file_path=file_path,
+        file_size=file_size,
+        mime_type=image.content_type or "image/jpeg",
+    )
+    db.add(asset)
+    db.flush()
+    
+    # Check or create credits
+    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
+    if not credit:
+        credit = Credit(user_id=user.id, balance=10)  # Give 10 free credits
+        db.add(credit)
+        db.flush()
+    
+    if credit.balance < 1:
+        raise HTTPException(status_code=402, detail="Insufficient credits")
+    
+    # Create job with proper prompt
+    style_prompts = {
+        "luster": "Luster AI signature style - luxury editorial real estate photography with dramatic lighting",
+        "flambient": "Bright, airy interior with crisp whites and flambient lighting technique"
+    }
+    
+    job = Job(
+        asset_id=asset.id,
+        user_id=user.id,
+        prompt=style_prompts.get(style, style_prompts["luster"]),
+        status=JobStatus.queued,
+        credits_used=1,
+    )
+    db.add(job)
+    db.flush()
+    
+    # Create job event
+    event = JobEvent(
+        job_id=job.id,
+        event_type="created",
+        details=json.dumps({"source": "mobile", "style": style}),
+    )
+    db.add(event)
+    db.commit()
+    
+    print(f"Job created: {job.id}")
+    
+    return {
+        "job_id": str(job.id),
+        "status": "queued",
+        "message": "Enhancement job created successfully"
+    }
+
+
+@app.post("/api/mobile/enhance-base64")
+async def mobile_enhance_base64(
+    request: Base64ImageRequest,
+    db: Session = Depends(get_db),
+):
+    """Mobile endpoint to enhance image from base64 data"""
+    
+    print(f"\n=== MOBILE ENHANCE BASE64 DEBUG ===")
+    print(f"Style: {request.style}")
+    print(f"Image data length: {len(request.image)} chars")
+    
+    # Decode base64 image
+    try:
+        image_data = base64.b64decode(request.image)
+        print(f"Decoded image size: {len(image_data)} bytes")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
+    
+    # Get or create mobile shoot
+    user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
+    if not user:
+        user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
+        db.add(user)
+        db.commit()
+    
+    mobile_shoot = db.query(Shoot).filter(
+        Shoot.user_id == user.id,
+        Shoot.name == "Mobile Uploads"
+    ).first()
+    
+    if not mobile_shoot:
+        mobile_shoot = Shoot(
+            id=str(uuid.uuid4()),
+            user_id=user.id,
+            name="Mobile Uploads"
+        )
+        db.add(mobile_shoot)
+        db.flush()
+    
+    # Save image data
+    unique_filename = f"mobile_{uuid.uuid4()}.jpg"
+    file_path = os.path.join(UPLOADS_DIR, unique_filename)
+    
+    with open(file_path, "wb") as f:
+        f.write(image_data)
+    
+    file_size = len(image_data)
+    print(f"File saved: {file_path}, size: {file_size} bytes")
+    
+    # Create asset
+    asset = Asset(
+        shoot_id=mobile_shoot.id,
+        user_id=user.id,
+        original_filename="photo.jpg",
+        file_path=file_path,
+        file_size=file_size,
+        mime_type="image/jpeg",
+    )
+    db.add(asset)
+    db.flush()
+    
+    # Check or create credits
+    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
+    if not credit:
+        credit = Credit(user_id=user.id, balance=10)
+        db.add(credit)
+        db.flush()
+    
+    if credit.balance < 1:
+        raise HTTPException(status_code=402, detail="Insufficient credits")
+    
+    # Create job
+    style_prompts = {
+        "luster": "Luster AI signature style - luxury editorial real estate photography with dramatic lighting",
+        "flambient": "Bright, airy interior with crisp whites and flambient lighting technique"
+    }
+    
+    job = Job(
+        asset_id=asset.id,
+        user_id=user.id,
+        prompt=style_prompts.get(request.style, style_prompts["luster"]),
+        status=JobStatus.queued,
+        credits_used=1,
+    )
+    db.add(job)
+    db.flush()
+    
+    # Create job event
+    event = JobEvent(
+        job_id=job.id,
+        event_type="created",
+        details=json.dumps({"source": "mobile_base64", "style": request.style}),
+    )
+    db.add(event)
+    db.commit()
+    
+    print(f"Job created: {job.id}")
+    
+    return {
+        "job_id": str(job.id),
+        "status": "queued",
+        "message": "Enhancement job created successfully"
+    }
+
+
+@app.get("/api/mobile/enhance/{job_id}/status")
+def mobile_job_status(job_id: str, db: Session = Depends(get_db)):
+    """Get status of mobile enhancement job"""
+    
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    result = {
+        "job_id": str(job.id),
+        "status": job.status.value,
+        "created_at": job.created_at.isoformat(),
+        "updated_at": job.updated_at.isoformat(),
+    }
+    
+    if job.started_at:
+        result["started_at"] = job.started_at.isoformat()
+    
+    if job.completed_at:
+        result["completed_at"] = job.completed_at.isoformat()
+    
+    if job.status == JobStatus.succeeded and job.output_path:
+        # Return the output URL for mobile to fetch
+        result["enhanced_image_url"] = f"/outputs/{os.path.basename(job.output_path)}"
+    
+    if job.status == JobStatus.failed and job.error_message:
+        result["error"] = job.error_message
+    
+    return result
+
+
+@app.get("/api/mobile/styles")
+def mobile_get_styles():
+    """Get available enhancement styles for mobile"""
+    return {
+        "styles": [
+            {
+                "id": "luster",
+                "name": "Luster",
+                "description": "Luster AI signature style - luxury editorial real estate photography"
+            },
+            {
+                "id": "flambient",
+                "name": "Flambient",
+                "description": "Bright, airy interior with crisp whites and flambient lighting"
+            }
+        ]
+    }
 
 
 if __name__ == "__main__":
