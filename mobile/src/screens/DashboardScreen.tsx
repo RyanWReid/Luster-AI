@@ -92,6 +92,9 @@ const mockProperties = [
     beds: 5,
     baths: 4,
     image: defaultPropertyImage,
+    images: [], // No enhanced images for mock data
+    originalImages: [],
+    isEnhanced: false,
   },
   {
     id: '2',
@@ -100,6 +103,9 @@ const mockProperties = [
     beds: 3,
     baths: 2,
     image: defaultPropertyImage,
+    images: [],
+    originalImages: [],
+    isEnhanced: false,
   },
   {
     id: '3',
@@ -108,6 +114,9 @@ const mockProperties = [
     beds: 4,
     baths: 3,
     image: defaultPropertyImage,
+    images: [],
+    originalImages: [],
+    isEnhanced: false,
   },
 ]
 
