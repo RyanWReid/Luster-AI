@@ -10,6 +10,7 @@ import {
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path } from 'react-native-svg'
+import { usePhotos } from '../context/PhotoContext'
 
 // Close icon
 const CloseIcon = () => (
@@ -107,11 +108,12 @@ const SummaryRow = ({ label, value, onEdit }: SummaryRowProps) => (
 export default function ConfirmationScreen() {
   const navigation = useNavigation()
   const route = useRoute()
+  const { selectedPhotos } = usePhotos()
   const currentStep = 3
 
-  // Get data from previous screens (in a real app, this would come from route params or context)
+  // Get data from previous screens
   const selectedStyle = (route.params as any)?.style || 'Flambient'
-  const photoCount = (route.params as any)?.photoCount || 10
+  const photoCount = selectedPhotos.length || 1
   const tokenCost = photoCount * 2 // Example: 2 tokens per photo
 
   const handleClose = () => {
@@ -128,6 +130,8 @@ export default function ConfirmationScreen() {
 
   const handleConfirm = () => {
     // Process the enhancement request
+    console.log('ConfirmationScreen - handleConfirm')
+    console.log('selectedPhotos from context:', selectedPhotos)
     console.log('Processing enhancement with:', {
       style: selectedStyle,
       photos: photoCount,

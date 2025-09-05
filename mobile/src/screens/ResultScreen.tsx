@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path } from 'react-native-svg'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
+import { usePhotos } from '../context/PhotoContext'
 
 const { width, height } = Dimensions.get('window')
 
@@ -115,28 +116,32 @@ interface EnhancedImage {
 
 export default function ResultScreen() {
   const navigation = useNavigation()
+  const { selectedPhotos } = usePhotos()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showOriginal, setShowOriginal] = useState(false)
-  const sliderPosition = useRef(new Animated.Value(width)).current
+  const [containerWidth, setContainerWidth] = useState(width)
+  const sliderPosition = useRef(new Animated.Value(width / 2)).current
 
-  // Mock data - replace with actual enhanced images
+  // Debug: Log selected photos
+  console.log('ResultScreen - selectedPhotos:', selectedPhotos)
+  console.log('ResultScreen - selectedPhotos length:', selectedPhotos.length)
+  
+  // Create enhanced images from selected photos
+  // Original = user's photo (before), Enhanced = placeholder (after)
   const [images] = useState<EnhancedImage[]>([
     {
       id: '1',
-      original: require('../../assets/photo.png'),
-      enhanced: require('../../assets/photo.png'),
+      original: selectedPhotos && selectedPhotos.length > 0 
+        ? { uri: selectedPhotos[0] }
+        : require('../../assets/welcome.png'), // Fallback if no photo selected
+      enhanced: require('../../assets/photo.png'), // Placeholder for enhanced version
     },
-    {
-      id: '2',
-      original: require('../../assets/photo.png'),
+    ...selectedPhotos.slice(1).map((photo, index) => ({
+      id: `${index + 2}`,
+      original: { uri: photo },
       enhanced: require('../../assets/photo.png'),
-    },
-    {
-      id: '3',
-      original: require('../../assets/photo.png'),
-      enhanced: require('../../assets/photo.png'),
-    },
-  ])
+    }))
+  ].filter(img => img))
 
   const panResponder = useRef(
     PanResponder.create({
@@ -145,7 +150,8 @@ export default function ResultScreen() {
       },
       onPanResponderMove: (evt, gestureState) => {
         // Update slider position for before/after comparison
-        const newPosition = Math.max(0, Math.min(width, gestureState.moveX))
+        // Clamp between 0 and container width
+        const newPosition = Math.max(0, Math.min(containerWidth, gestureState.moveX))
         sliderPosition.setValue(newPosition)
       },
       onPanResponderRelease: () => {
@@ -197,8 +203,22 @@ export default function ResultScreen() {
   }
 
   const handleSaveAll = async () => {
+    // Create a new listing with the first enhanced image
+    if (images.length > 0) {
+      const enhancedImage = images[0].enhanced
+      addListing({
+        address: 'New Listing',
+        price: '$---,---',
+        beds: 0,
+        baths: 0,
+        image: enhancedImage,
+        isEnhanced: true,
+      })
+    }
+    
     // Save all enhanced images
     console.log('Saving all images...')
+    navigation.navigate('Dashboard' as never)
   }
 
   const renderThumbnail = ({ item, index }: { item: EnhancedImage; index: number }) => (
@@ -224,7 +244,13 @@ export default function ResultScreen() {
       </View>
 
       {/* Main Image Viewer */}
-      <View style={styles.imageContainer}>
+      <View 
+        style={styles.imageContainer}
+        onLayout={(event) => {
+          const { width } = event.nativeEvent.layout
+          setContainerWidth(width)
+        }}
+      >
         {/* Original Image */}
         <Image
           source={images[currentIndex].original}
@@ -260,7 +286,7 @@ export default function ResultScreen() {
         >
           <View style={styles.sliderLine} />
           <View style={styles.sliderCircle}>
-            <Text style={styles.sliderArrows}>{'◀ ▶'}</Text>
+            <Text style={styles.sliderArrows}>{'← →'}</Text>
           </View>
         </Animated.View>
 
@@ -271,17 +297,19 @@ export default function ResultScreen() {
         </View>
       </View>
 
-      {/* Thumbnail Gallery */}
-      <View style={styles.thumbnailContainer}>
-        <FlatList
-          data={images}
-          renderItem={renderThumbnail}
-          keyExtractor={(item) => item.id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.thumbnailList}
-        />
-      </View>
+      {/* Thumbnail Gallery - Only show if multiple images */}
+      {images.length > 1 && (
+        <View style={styles.thumbnailContainer}>
+          <FlatList
+            data={images}
+            renderItem={renderThumbnail}
+            keyExtractor={(item) => item.id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.thumbnailList}
+          />
+        </View>
+      )}
 
       {/* Action Buttons */}
       <View style={styles.actionButtons}>
@@ -388,33 +416,42 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     bottom: 0,
-    width: 40,
+    width: 60,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ translateX: -20 }],
+    transform: [{ translateX: -30 }],
+    zIndex: 10,
   },
   sliderLine: {
     position: 'absolute',
-    width: 2,
+    width: 4,
     height: '100%',
     backgroundColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
   },
   sliderCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: '#F3F4F6',
   },
   sliderArrows: {
-    fontSize: 12,
-    color: '#6B7280',
+    fontSize: 16,
+    color: '#374151',
+    fontWeight: 'bold',
   },
   labelContainer: {
     position: 'absolute',

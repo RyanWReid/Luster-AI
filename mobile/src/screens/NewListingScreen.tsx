@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native'
 import * as ImagePicker from 'expo-image-picker'
 import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path } from 'react-native-svg'
+import { usePhotos } from '../context/PhotoContext'
 
 // Close icon
 const CloseIcon = () => (
@@ -83,8 +84,16 @@ const StepIndicator = ({ currentStep, totalSteps }: StepIndicatorProps) => {
 
 export default function NewListingScreen() {
   const navigation = useNavigation()
+  const { selectedPhotos, setSelectedPhotos } = usePhotos()
   const [selectedImages, setSelectedImages] = useState<string[]>([])
   const [currentStep] = useState(1)
+
+  // Initialize with photos from context if available
+  useEffect(() => {
+    if (selectedPhotos.length > 0) {
+      setSelectedImages(selectedPhotos)
+    }
+  }, [])
 
   const handleClose = () => {
     navigation.goBack()
@@ -100,12 +109,16 @@ export default function NewListingScreen() {
 
     if (!result.canceled && result.assets) {
       const newImages = result.assets.map(asset => asset.uri)
+      console.log('NewListingScreen - Images picked:', newImages)
       setSelectedImages([...selectedImages, ...newImages])
     }
   }
 
   const handleContinue = () => {
     if (selectedImages.length > 0) {
+      // Store images in context
+      console.log('NewListingScreen - Storing images:', selectedImages)
+      setSelectedPhotos(selectedImages)
       // Navigate to style selection (step 2)
       navigation.navigate('StyleSelection' as never)
     }

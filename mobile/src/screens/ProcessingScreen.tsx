@@ -11,6 +11,8 @@ import {
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import Svg, { Path } from 'react-native-svg'
+import { usePhotos } from '../context/PhotoContext'
+import { useListings } from '../context/ListingsContext'
 
 // Close icon
 const CloseIcon = () => (
@@ -49,6 +51,13 @@ const SparkleIcon = ({ size = 60 }: { size?: number }) => (
 
 export default function ProcessingScreen() {
   const navigation = useNavigation()
+  const { selectedPhotos } = usePhotos()
+  const { addListing } = useListings()
+  const firstImage = selectedPhotos[0] || null
+  
+  // Debug: Log selected photos
+  console.log('ProcessingScreen - selectedPhotos:', selectedPhotos)
+  console.log('ProcessingScreen - firstImage:', firstImage)
   const rotateAnim = useRef(new Animated.Value(0)).current
   const pulseAnim = useRef(new Animated.Value(1)).current
   const shimmerAnim = useRef(new Animated.Value(0)).current
@@ -102,6 +111,16 @@ export default function ProcessingScreen() {
 
     // Simulate processing completion after delay
     const timer = setTimeout(() => {
+      // Create a new listing with the enhanced photo
+      addListing({
+        address: 'New Listing',
+        price: '$---,---',
+        beds: 0,
+        baths: 0,
+        image: firstImage ? { uri: firstImage } : require('../../assets/photo.png'),
+        isEnhanced: true,
+      })
+      
       // Navigate to results screen
       navigation.navigate('Result' as never)
     }, 10000) // 10 seconds for demo
@@ -172,7 +191,7 @@ export default function ProcessingScreen() {
         {/* Preview Image */}
         <View style={styles.imageContainer}>
           <Image
-            source={require('../../assets/photo.png')} // Replace with actual preview image
+            source={firstImage ? { uri: firstImage } : require('../../assets/photo.png')}
             style={styles.previewImage}
             resizeMode="cover"
           />

@@ -255,3 +255,57 @@ Claude Code provides specialized agents for different types of work. **ALWAYS us
 - Credits deducted only on successful job completion
 - Prompt system uses structured params converted to strings
 - EXIF data stripped from all outputs for privacy
+
+## Design System Reference
+For complete design guidelines including visual design system, component patterns, accessibility standards, and mobile-first rules, see DESIGN_GUIDELINES.md
+
+For Figma to code implementation ensuring pixel-perfect accuracy, see FIGMA_IMPLEMENTATION.md
+
+### CRITICAL: Implementation Process
+**ALWAYS follow this process before implementing ANY UI component:**
+
+1. **ASK QUESTIONS FIRST** - If there are ANY ambiguities, ask clarifying questions
+2. **PRESENT A PLAN** - Show exactly what will be built before writing any code
+3. **WAIT FOR APPROVAL** - Get explicit confirmation before proceeding
+4. **IMPLEMENT EXACTLY** - Match Figma designs pixel-for-pixel
+
+**Required Questions Before Implementation:**
+- Do you have a Figma file/link to reference?
+- Which specific components/screens should be implemented?
+- What are the exact breakpoints in your Figma design?
+- Are there any deviations from the Figma design that are acceptable?
+- What is the priority order for implementation?
+
+**Plan Template:**
+```
+## Implementation Plan: [Component/Feature Name]
+
+### Figma Reference
+- File: [Link to Figma]
+- Frame/Component: [Specific name]
+- States: [Default, Hover, Active, etc.]
+
+### Specifications Extracted
+- Dimensions: [Width x Height]
+- Colors: [List exact values]
+- Typography: [Font, size, weight, line-height]
+- Spacing: [Padding, margins, gaps]
+- Shadows: [Exact values]
+
+### Technical Approach
+- [ ] Technology: [Tailwind/CSS Modules/styled-components]
+- [ ] Responsive behavior: [How it adapts]
+- [ ] Interactions: [Animations, transitions]
+- [ ] Data requirements: [Props, state]
+
+### Questions/Clarifications Needed
+- [Any ambiguities that need resolution]
+
+### Estimated Timeline
+- Component structure: X minutes
+- Styling: X minutes  
+- States & interactions: X minutes
+- Testing & refinement: X minutes
+
+**Proceed? (Y/N)**
+```
