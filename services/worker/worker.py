@@ -81,21 +81,28 @@ class Worker:
             print(f"  - Is file: {os.path.isfile(asset.file_path)}")
             print(f"  - Is readable: {os.access(asset.file_path, os.R_OK)}")
             
-            # Extract tier information from job events
+            # Extract tier and style information from prompt_params
             tier = "premium"  # default
+            style_preset = "default"  # default
             try:
-                creation_event = self.db.query(JobEvent).filter(
-                    JobEvent.job_id == job.id,
-                    JobEvent.event_type == "created"
-                ).first()
-                if creation_event and creation_event.details:
-                    details = json.loads(creation_event.details)
-                    tier = details.get("tier", "premium")
-                    print(f"Extracted tier from job events: {tier}")
+                if job.prompt_params:
+                    params = json.loads(job.prompt_params)
+                    tier = params.get("tier", "premium")
+                    style_preset = params.get("style", "default")
+                    print(f"Extracted from prompt_params - tier: {tier}, style: {style_preset}")
                 else:
-                    print(f"No creation event found, using default tier: {tier}")
+                    # Fallback to job events for backward compatibility
+                    creation_event = self.db.query(JobEvent).filter(
+                        JobEvent.job_id == job.id,
+                        JobEvent.event_type == "created"
+                    ).first()
+                    if creation_event and creation_event.details:
+                        details = json.loads(creation_event.details)
+                        tier = details.get("tier", "premium")
+                        style_preset = details.get("style", "default")
+                        print(f"Extracted from job events - tier: {tier}, style: {style_preset}")
             except Exception as e:
-                print(f"Could not extract tier from job events: {e}")
+                print(f"Could not extract parameters: {e}")
             
             print(f"Job processing parameters:")
             print(f"  - Prompt: {job.prompt}")
@@ -111,8 +118,9 @@ class Worker:
             print(f"\nCalling image processor...")
             result = self.processor.process_image(
                 input_path=asset.file_path,
-                prompt=job.prompt,
+                prompt=job.prompt or "",  # Use empty string if no prompt
                 output_path=output_path,
+                style_preset=style_preset,
                 tier=tier
             )
             print(f"Image processor result: {result}")
