@@ -6,7 +6,9 @@ export interface PropertyListing {
   price: string
   beds: number
   baths: number
-  image: any // Image source (can be require() or { uri: string })
+  image: any // Cover image (can be require() or { uri: string })
+  images?: any[] // All enhanced images for this listing
+  originalImages?: any[] // Original images before enhancement
   isEnhanced?: boolean
   createdAt: Date
 }

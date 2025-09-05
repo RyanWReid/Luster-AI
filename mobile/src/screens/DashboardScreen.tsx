@@ -9,12 +9,14 @@ import {
   FlatList,
   Image,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { useListings } from '../context/ListingsContext'
+import { usePhotos } from '../context/PhotoContext'
 
 const { width } = Dimensions.get('window')
 
@@ -67,6 +69,20 @@ const SettingsIcon = ({ color = '#9CA3AF' }: { color?: string }) => (
   </Svg>
 )
 
+// Coin icon for credits
+const CoinIcon = ({ color = '#F59E0B' }: { color?: string }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2" fill="none" />
+    <Path
+      d="M12 17V7M15 9.5A2.5 2.5 0 0012.5 7h-1A2.5 2.5 0 009 9.5 2.5 2.5 0 0011.5 12H12.5A2.5 2.5 0 0115 14.5 2.5 2.5 0 0112.5 17h-1A2.5 2.5 0 019 14.5"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
 // Mock data for properties
 const mockProperties = [
   {
@@ -100,8 +116,16 @@ type FilterTag = 'Newest' | 'Oldest' | 'Beds' | 'Baths'
 export default function DashboardScreen() {
   const navigation = useNavigation()
   const { listings } = useListings()
+  const { creditBalance, isLoadingCredits, refreshCredits } = usePhotos()
   const [selectedFilter, setSelectedFilter] = useState<FilterTag>('Newest')
   const [searchText, setSearchText] = useState('')
+  
+  // Debug: Log listings
+  console.log('DashboardScreen - listings count:', listings.length)
+  if (listings.length > 0) {
+    console.log('DashboardScreen - first listing:', listings[0])
+    console.log('DashboardScreen - first listing images:', listings[0].images)
+  }
 
   const filterTags: FilterTag[] = ['Newest', 'Oldest', 'Beds', 'Baths']
 
@@ -116,7 +140,8 @@ export default function DashboardScreen() {
     // navigation.navigate('Profile' as never)
   }
 
-  const handlePropertyPress = (item: typeof mockProperties[0]) => {
+  const handlePropertyPress = (item: any) => {
+    // Pass the full property data including images array
     navigation.navigate('Gallery' as never, { 
       property: {
         address: item.address,
@@ -124,11 +149,14 @@ export default function DashboardScreen() {
         beds: item.beds,
         baths: item.baths,
         image: item.image,
+        images: item.images, // Pass all enhanced images
+        originalImages: item.originalImages, // Pass original images too
+        isEnhanced: item.isEnhanced,
       }
     } as never)
   }
 
-  const renderPropertyCard = ({ item }: { item: typeof mockProperties[0] }) => (
+  const renderPropertyCard = ({ item }: { item: any }) => (
     <TouchableOpacity 
       style={styles.propertyCard} 
       activeOpacity={0.9}
@@ -153,12 +181,33 @@ export default function DashboardScreen() {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.title}>Dashboard</Text>
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={handleProfile}
-          >
-            <SettingsIcon color="#6B7280" />
-          </TouchableOpacity>
+          <View style={styles.headerRight}>
+            <TouchableOpacity
+              style={styles.creditButton}
+              onPress={refreshCredits}
+              activeOpacity={0.7}
+            >
+              <LinearGradient
+                colors={['#FEF3C7', '#FDE68A']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.creditBadge}
+              >
+                <CoinIcon />
+                {isLoadingCredits ? (
+                  <ActivityIndicator size="small" color="#F59E0B" style={styles.creditLoading} />
+                ) : (
+                  <Text style={styles.creditText}>{creditBalance}</Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={handleProfile}
+            >
+              <SettingsIcon color="#6B7280" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Search Bar */}
@@ -216,6 +265,9 @@ export default function DashboardScreen() {
               beds: listing.beds,
               baths: listing.baths,
               image: listing.image,
+              images: listing.images, // Include all enhanced images
+              originalImages: listing.originalImages, // Include original images
+              isEnhanced: listing.isEnhanced,
             })),
             ...mockProperties,
           ]}
@@ -246,7 +298,7 @@ export default function DashboardScreen() {
           style={styles.enhanceButtonContainer}
         >
           <LinearGradient
-            colors={['#FFE855', '#FFBF35']}  // Yellow to orange gradient
+            colors={['#FFB535', '#FFCF55']}  // Orange to lighter yellow gradient
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}  // Horizontal gradient left to right
             style={styles.enhanceButton}
@@ -274,6 +326,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 10,
     paddingBottom: 20,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  creditButton: {
+    borderRadius: 20,
+  },
+  creditBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 6,
+  },
+  creditText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  creditLoading: {
+    marginLeft: 4,
   },
   settingsButton: {
     padding: 4,
@@ -441,8 +517,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   lusterLogo: {
-    width: 28,
-    height: 28,
+    width: 38,
+    height: 38,
     resizeMode: 'contain',
   },
 })

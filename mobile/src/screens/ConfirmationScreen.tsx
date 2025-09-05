@@ -11,6 +11,7 @@ import { useNavigation, useRoute } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path } from 'react-native-svg'
 import { usePhotos } from '../context/PhotoContext'
+import enhancementService from '../services/enhancementService'
 
 // Close icon
 const CloseIcon = () => (
@@ -137,8 +138,22 @@ export default function ConfirmationScreen() {
       photos: photoCount,
       cost: tokenCost,
     })
-    // Navigate to processing screen
-    navigation.navigate('Processing' as never)
+    
+    // Map style names to API values
+    const styleMapping: { [key: string]: 'luster' | 'flambient' } = {
+      'Luster': 'luster',
+      'Flambient': 'flambient',
+      'Minimalist': 'flambient' // Default minimalist to flambient for now
+    }
+    
+    const apiStyle = styleMapping[selectedStyle] || 'luster'
+    
+    // Navigate to processing screen with enhancement parameters
+    navigation.navigate('Processing' as never, {
+      style: apiStyle,
+      photos: selectedPhotos,
+      photoCount: photoCount
+    })
   }
 
   return (

@@ -12,7 +12,7 @@ import {
   PanResponder,
   Animated,
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path } from 'react-native-svg'
 import * as MediaLibrary from 'expo-media-library'
@@ -117,31 +117,44 @@ interface EnhancedImage {
 
 export default function ResultScreen() {
   const navigation = useNavigation()
-  const { selectedPhotos } = usePhotos()
+  const route = useRoute()
+  const { selectedPhotos, enhancedPhotos } = usePhotos()
   const { addListing } = useListings()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showOriginal, setShowOriginal] = useState(false)
   const [containerWidth, setContainerWidth] = useState(width)
   const sliderPosition = useRef(new Animated.Value(width / 2)).current
 
+  // Get enhanced photos from navigation params or context
+  const params = route.params as any
+  const enhancedFromNav = params?.enhancedPhotos || enhancedPhotos || []
+  const originalFromNav = params?.originalPhotos || selectedPhotos || []
+
   // Debug: Log selected photos
   console.log('ResultScreen - selectedPhotos:', selectedPhotos)
-  console.log('ResultScreen - selectedPhotos length:', selectedPhotos.length)
+  console.log('ResultScreen - enhancedPhotos:', enhancedFromNav)
+  console.log('ResultScreen - originalPhotos:', originalFromNav)
+  console.log('ResultScreen - First enhanced URL:', enhancedFromNav[0])
+  console.log('ResultScreen - Is enhanced valid?', enhancedFromNav[0] && enhancedFromNav[0] !== '')
   
   // Create enhanced images from selected photos
-  // Original = user's photo (before), Enhanced = placeholder (after)
+  // Original = user's photo (before), Enhanced = API result or fallback (after)
   const [images] = useState<EnhancedImage[]>([
     {
       id: '1',
-      original: selectedPhotos && selectedPhotos.length > 0 
-        ? { uri: selectedPhotos[0] }
+      original: originalFromNav && originalFromNav.length > 0 
+        ? { uri: originalFromNav[0] }
         : require('../../assets/welcome.png'), // Fallback if no photo selected
-      enhanced: require('../../assets/photo.png'), // Placeholder for enhanced version
+      enhanced: enhancedFromNav[0] && enhancedFromNav[0] !== ''
+        ? { uri: enhancedFromNav[0] }
+        : { uri: originalFromNav[0] }, // Show original if enhancement failed
     },
-    ...selectedPhotos.slice(1).map((photo, index) => ({
+    ...originalFromNav.slice(1).map((photo, index) => ({
       id: `${index + 2}`,
       original: { uri: photo },
-      enhanced: require('../../assets/photo.png'),
+      enhanced: enhancedFromNav[index + 1] && enhancedFromNav[index + 1] !== ''
+        ? { uri: enhancedFromNav[index + 1] }
+        : require('../../assets/photo.png'), // Fallback to mock if enhancement failed
     }))
   ].filter(img => img))
 
@@ -205,21 +218,45 @@ export default function ResultScreen() {
   }
 
   const handleSaveAll = async () => {
-    // Create a new listing with the first enhanced image
-    if (images.length > 0) {
-      const enhancedImage = images[0].enhanced
-      addListing({
-        address: 'New Listing',
+    console.log('handleSaveAll - Starting save process')
+    console.log('handleSaveAll - enhancedFromNav:', enhancedFromNav)
+    console.log('handleSaveAll - originalFromNav:', originalFromNav)
+    
+    // Create a new listing with all enhanced images
+    if (images.length > 0 && enhancedFromNav.length > 0 && enhancedFromNav[0] !== '') {
+      // Get all valid enhanced images
+      const allEnhancedImages = enhancedFromNav
+        .filter(url => url && url !== '')
+        .map(url => ({ uri: url }))
+      
+      // Get all original images
+      const allOriginalImages = originalFromNav
+        .map(url => ({ uri: url }))
+      
+      console.log('handleSaveAll - allEnhancedImages:', allEnhancedImages)
+      console.log('handleSaveAll - allOriginalImages:', allOriginalImages)
+      
+      const newListing = {
+        address: `${allEnhancedImages.length} Photos Enhanced`,
         price: '$---,---',
         beds: 0,
         baths: 0,
-        image: enhancedImage,
+        image: allEnhancedImages[0] || images[0].enhanced, // Use first enhanced as cover
+        images: allEnhancedImages, // Store all enhanced photos
+        originalImages: allOriginalImages, // Store original photos too
         isEnhanced: true,
-      })
+      }
+      
+      console.log('handleSaveAll - Creating listing:', newListing)
+      addListing(newListing)
+      
+      console.log('Saved listing with', allEnhancedImages.length, 'enhanced photos')
+    } else {
+      console.log('handleSaveAll - No enhanced images to save')
     }
     
-    // Save all enhanced images
-    console.log('Saving all images...')
+    // Navigate to Dashboard after saving
+    console.log('Navigating to Dashboard...')
     navigation.navigate('Dashboard' as never)
   }
 

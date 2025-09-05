@@ -56,30 +56,47 @@ export default function GalleryScreen() {
     beds: 4,
     baths: 3,
   }
+  
+  // Debug: Log what property data we received
+  console.log('GalleryScreen - route.params:', route.params)
+  console.log('GalleryScreen - propertyData:', propertyData)
+  console.log('GalleryScreen - propertyData.images:', propertyData?.images)
 
-  // Generate sample images with varying heights for mosaic effect
+  // Use actual images from the property listing or fall back to mock
   const galleryImages = useMemo<GalleryImage[]>(() => {
-    // Mock images - in real app, these would come from the property listing
+    // Check if property has enhanced images
+    const propertyImages = propertyData?.images || []
+    const hasRealImages = propertyImages.length > 0
+    
+    // If we have real enhanced images, use them
+    if (hasRealImages) {
+      console.log('GalleryScreen - Using real enhanced images:', propertyImages.length)
+      const heights = [180, 220, 160, 240, 200, 180, 220, 160]
+      
+      return propertyImages.map((image, index) => ({
+        id: `image-${index}`,
+        uri: image, // Already in { uri: string } format
+        height: heights[index % heights.length],
+      }))
+    }
+    
+    // Otherwise fall back to mock images
+    console.log('GalleryScreen - No enhanced images, using mock data')
     const mockImages = [
-      require('../../assets/photo.png'),
-      require('../../assets/welcome.png'),
-      require('../../assets/photo.png'),
-      require('../../assets/welcome.png'),
       require('../../assets/photo.png'),
       require('../../assets/welcome.png'),
       require('../../assets/photo.png'),
       require('../../assets/welcome.png'),
     ]
 
-    // Create varying heights for mosaic effect
-    const heights = [180, 220, 160, 240, 200, 180, 220, 160]
+    const heights = [180, 220, 160, 240]
     
     return mockImages.map((uri, index) => ({
       id: `image-${index}`,
       uri,
       height: heights[index % heights.length],
     }))
-  }, [])
+  }, [propertyData])
 
   // Split images into two columns for masonry layout
   const [leftColumn, rightColumn] = useMemo(() => {

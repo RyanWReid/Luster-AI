@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -8,11 +8,13 @@ import {
   Image,
   Animated,
   Easing,
+  Alert,
 } from 'react-native'
-import { useNavigation } from '@react-navigation/native'
+import { useNavigation, useRoute } from '@react-navigation/native'
 import Svg, { Path } from 'react-native-svg'
 import { usePhotos } from '../context/PhotoContext'
 import { useListings } from '../context/ListingsContext'
+import enhancementService from '../services/enhancementService'
 
 // Close icon
 const CloseIcon = () => (
@@ -51,13 +53,27 @@ const SparkleIcon = ({ size = 60 }: { size?: number }) => (
 
 export default function ProcessingScreen() {
   const navigation = useNavigation()
-  const { selectedPhotos } = usePhotos()
+  const route = useRoute()
+  const { selectedPhotos, setEnhancedPhotos } = usePhotos()
   const { addListing } = useListings()
   const firstImage = selectedPhotos[0] || null
+  
+  // Get parameters from previous screen
+  const params = route.params as any
+  const style = params?.style || 'luster'
+  const photos = params?.photos || selectedPhotos
+  const photoCount = params?.photoCount || photos.length
+  
+  // State for tracking progress
+  const [processedCount, setProcessedCount] = useState(0)
+  const [currentStatus, setCurrentStatus] = useState('Starting enhancement...')
+  const [enhancedUrls, setEnhancedUrls] = useState<string[]>([])
   
   // Debug: Log selected photos
   console.log('ProcessingScreen - selectedPhotos:', selectedPhotos)
   console.log('ProcessingScreen - firstImage:', firstImage)
+  console.log('ProcessingScreen - style:', style)
+  
   const rotateAnim = useRef(new Animated.Value(0)).current
   const pulseAnim = useRef(new Animated.Value(1)).current
   const shimmerAnim = useRef(new Animated.Value(0)).current
@@ -109,22 +125,71 @@ export default function ProcessingScreen() {
       ])
     ).start()
 
-    // Simulate processing completion after delay
+    // Process images with real API
+    const processImages = async () => {
+      try {
+        setCurrentStatus('Uploading images...')
+        
+        // For demo/testing, we'll use the local image URIs as URLs
+        // In production, you'd upload these to R2 first and get proper URLs
+        const imageUrls = photos.map((photo: string) => photo)
+        
+        setCurrentStatus('Enhancing images with AI...')
+        
+        // Process all images
+        const results = await enhancementService.enhanceMultipleImages(
+          imageUrls,
+          style as 'luster' | 'flambient',
+          (completed, total, status) => {
+            setProcessedCount(completed)
+            setCurrentStatus(`Processing image ${completed} of ${total}...`)
+          }
+        )
+        
+        // Store enhanced URLs
+        setEnhancedUrls(results)
+        if (setEnhancedPhotos) {
+          setEnhancedPhotos(results)
+        }
+        
+        // Add to listings if we have results
+        if (results.length > 0 && results[0]) {
+          addListing({
+            address: 'New Listing',
+            price: '$---,---',
+            beds: 0,
+            baths: 0,
+            image: { uri: results[0] },
+            isEnhanced: true,
+          })
+        }
+        
+        // Navigate to results
+        navigation.navigate('Result' as never, {
+          enhancedPhotos: results,
+          originalPhotos: photos,
+          style: style
+        })
+      } catch (error) {
+        console.error('Enhancement failed:', error)
+        Alert.alert(
+          'Enhancement Failed',
+          'There was an error processing your images. Please try again.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.navigate('Dashboard' as never)
+            }
+          ]
+        )
+      }
+    }
+    
+    // Start processing after a short delay for UI to settle
     const timer = setTimeout(() => {
-      // Create a new listing with the enhanced photo
-      addListing({
-        address: 'New Listing',
-        price: '$---,---',
-        beds: 0,
-        baths: 0,
-        image: firstImage ? { uri: firstImage } : require('../../assets/photo.png'),
-        isEnhanced: true,
-      })
-      
-      // Navigate to results screen
-      navigation.navigate('Result' as never)
-    }, 10000) // 10 seconds for demo
-
+      processImages()
+    }, 500)
+    
     return () => clearTimeout(timer)
   }, [navigation, rotateAnim, pulseAnim, shimmerAnim])
 
@@ -174,7 +239,9 @@ export default function ProcessingScreen() {
             <Text style={styles.sparkleText}>✨</Text>
           </Animated.View>
           
-          <Text style={styles.title}>Analyzing image</Text>
+          <Text style={styles.title}>
+            {processedCount > 0 ? `Enhancing ${processedCount} of ${photoCount}` : 'Analyzing images'}
+          </Text>
         </View>
         <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
           <CloseIcon />
@@ -185,7 +252,7 @@ export default function ProcessingScreen() {
       <View style={styles.content}>
         {/* Status Message */}
         <Text style={styles.statusMessage}>
-          Please don't close the app or lock your device
+          {currentStatus || 'Please don\'t close the app or lock your device'}
         </Text>
 
         {/* Preview Image */}
