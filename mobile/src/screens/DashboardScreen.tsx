@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
+import { useListings } from '../context/ListingsContext'
 
 const { width } = Dimensions.get('window')
 
@@ -98,6 +99,7 @@ type FilterTag = 'Newest' | 'Oldest' | 'Beds' | 'Baths'
 
 export default function DashboardScreen() {
   const navigation = useNavigation()
+  const { listings } = useListings()
   const [selectedFilter, setSelectedFilter] = useState<FilterTag>('Newest')
   const [searchText, setSearchText] = useState('')
 
@@ -114,8 +116,24 @@ export default function DashboardScreen() {
     // navigation.navigate('Profile' as never)
   }
 
+  const handlePropertyPress = (item: typeof mockProperties[0]) => {
+    navigation.navigate('Gallery' as never, { 
+      property: {
+        address: item.address,
+        price: item.price,
+        beds: item.beds,
+        baths: item.baths,
+        image: item.image,
+      }
+    } as never)
+  }
+
   const renderPropertyCard = ({ item }: { item: typeof mockProperties[0] }) => (
-    <TouchableOpacity style={styles.propertyCard} activeOpacity={0.9}>
+    <TouchableOpacity 
+      style={styles.propertyCard} 
+      activeOpacity={0.9}
+      onPress={() => handlePropertyPress(item)}
+    >
       <Image source={item.image} style={styles.propertyImage} />
       <View style={styles.propertyInfo}>
         <Text style={styles.propertyAddress}>{item.address}</Text>
@@ -190,7 +208,17 @@ export default function DashboardScreen() {
 
         {/* Property List */}
         <FlatList
-          data={mockProperties}
+          data={[
+            ...listings.map(listing => ({
+              id: listing.id,
+              address: listing.address,
+              price: listing.price,
+              beds: listing.beds,
+              baths: listing.baths,
+              image: listing.image,
+            })),
+            ...mockProperties,
+          ]}
           renderItem={renderPropertyCard}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
@@ -201,25 +229,13 @@ export default function DashboardScreen() {
       {/* Custom Bottom Navigation */}
       <View style={styles.bottomNavWrapper}>
         <LinearGradient
-          colors={['#DFDEDE', '#FFC039']}
+          colors={['#FFEDC3', '#F8F8F8']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.bottomNav}
         >
           <View style={styles.bottomNavContent}>
-            {/* Empty space on left for balance */}
-            <View style={styles.bottomNavSpacer} />
-
-            {/* Spacer for center button */}
-            <View style={{ width: 64 }} />
-
-            {/* Settings Button */}
-            <TouchableOpacity
-              style={styles.bottomNavButton}
-              onPress={handleProfile}
-            >
-              <SettingsIcon color="white" />
-            </TouchableOpacity>
+            {/* Content removed - just keeping the gradient bar */}
           </View>
         </LinearGradient>
 
@@ -230,9 +246,9 @@ export default function DashboardScreen() {
           style={styles.enhanceButtonContainer}
         >
           <LinearGradient
-            colors={['#8B5CF6', '#EC4899']}  // Purple to pink gradient
+            colors={['#FFE855', '#FFBF35']}  // Yellow to orange gradient
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}  // Diagonal gradient
+            end={{ x: 1, y: 0 }}  // Horizontal gradient left to right
             style={styles.enhanceButton}
           >
             <Image source={lusterWhiteLogo} style={styles.lusterLogo} />
@@ -393,7 +409,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 12, // Reduced from 20 (40% less)
-    paddingBottom: 8,  // Reduced from 12 (40% less)
+    paddingBottom: 24,  // Reduced from 12 (40% less)
     paddingHorizontal: 24,
     position: 'relative',
   },

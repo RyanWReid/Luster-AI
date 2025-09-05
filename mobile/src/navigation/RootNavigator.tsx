@@ -11,6 +11,7 @@ import StyleSelectionScreen from '../screens/StyleSelectionScreen'
 import ConfirmationScreen from '../screens/ConfirmationScreen'
 import ProcessingScreen from '../screens/ProcessingScreen'
 import ResultScreen from '../screens/ResultScreen'
+import GalleryScreen from '../screens/GalleryScreen'
 import MainTabs from './MainTabs'
 
 export type RootStackParamList = {
@@ -23,6 +24,7 @@ export type RootStackParamList = {
   Confirmation: undefined
   Processing: undefined
   Result: undefined
+  Gallery: undefined
   Main: undefined
 }
 
@@ -46,6 +48,7 @@ export default function RootNavigator() {
             <Stack.Screen name="Confirmation" component={ConfirmationScreen} />
             <Stack.Screen name="Processing" component={ProcessingScreen} />
             <Stack.Screen name="Result" component={ResultScreen} />
+            <Stack.Screen name="Gallery" component={GalleryScreen} />
             <Stack.Screen name="Main" component={MainTabs} />
           </>
         ) : (

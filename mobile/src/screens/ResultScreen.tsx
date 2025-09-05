@@ -18,6 +18,7 @@ import Svg, { Path } from 'react-native-svg'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import { usePhotos } from '../context/PhotoContext'
+import { useListings } from '../context/ListingsContext'
 
 const { width, height } = Dimensions.get('window')
 
@@ -117,6 +118,7 @@ interface EnhancedImage {
 export default function ResultScreen() {
   const navigation = useNavigation()
   const { selectedPhotos } = usePhotos()
+  const { addListing } = useListings()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showOriginal, setShowOriginal] = useState(false)
   const [containerWidth, setContainerWidth] = useState(width)
