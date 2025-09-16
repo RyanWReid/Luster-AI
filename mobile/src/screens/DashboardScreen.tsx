@@ -91,10 +91,14 @@ const mockProperties = [
     price: '$550,000',
     beds: 5,
     baths: 4,
+    squareFeet: 2850,
     image: defaultPropertyImage,
     images: [], // No enhanced images for mock data
     originalImages: [],
     isEnhanced: false,
+    propertyType: 'Single Family',
+    yearBuilt: 2020,
+    lotSize: '0.25 acres',
   },
   {
     id: '2',
@@ -102,10 +106,14 @@ const mockProperties = [
     price: '$425,000',
     beds: 3,
     baths: 2,
+    squareFeet: 1650,
     image: defaultPropertyImage,
     images: [],
     originalImages: [],
     isEnhanced: false,
+    propertyType: 'Condo',
+    yearBuilt: 2018,
+    lotSize: 'N/A',
   },
   {
     id: '3',
@@ -113,10 +121,14 @@ const mockProperties = [
     price: '$750,000',
     beds: 4,
     baths: 3,
+    squareFeet: 3200,
     image: defaultPropertyImage,
     images: [],
     originalImages: [],
     isEnhanced: false,
+    propertyType: 'Single Family',
+    yearBuilt: 2019,
+    lotSize: '0.35 acres',
   },
 ]
 
@@ -151,8 +163,9 @@ export default function DashboardScreen() {
 
   const handlePropertyPress = (item: any) => {
     // Pass the full property data including images array
-    navigation.navigate('Gallery' as never, { 
+    navigation.navigate('Project' as never, { 
       property: {
+        id: item.id,
         address: item.address,
         price: item.price,
         beds: item.beds,
@@ -161,6 +174,14 @@ export default function DashboardScreen() {
         images: item.images, // Pass all enhanced images
         originalImages: item.originalImages, // Pass original images too
         isEnhanced: item.isEnhanced,
+        // Add any additional property data if available
+        squareFeet: item.squareFeet,
+        propertyType: item.propertyType,
+        yearBuilt: item.yearBuilt,
+        lotSize: item.lotSize,
+        mlsNumber: item.mlsNumber,
+        listingStatus: item.listingStatus,
+        description: item.description,
       }
     } as never)
   }

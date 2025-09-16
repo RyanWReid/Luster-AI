@@ -10,8 +10,9 @@ import {
 } from 'react-native'
 import { useNavigation } from '@react-navigation/native'
 import * as ImagePicker from 'expo-image-picker'
+import { Camera } from 'expo-camera'
 import { LinearGradient } from 'expo-linear-gradient'
-import Svg, { Path } from 'react-native-svg'
+import Svg, { Path, Circle } from 'react-native-svg'
 import { usePhotos } from '../context/PhotoContext'
 
 // Close icon
@@ -34,6 +35,28 @@ const PlusIcon = () => (
       d="M12 5v14m-7-7h14"
       stroke="#92400E"
       strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+// Camera icon
+const CameraIcon = () => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2v11z"
+      stroke="#92400E"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Circle
+      cx="12"
+      cy="13"
+      r="4"
+      stroke="#92400E"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -114,6 +137,29 @@ export default function NewListingScreen() {
     }
   }
 
+  const takePhoto = async () => {
+    // Request camera permission
+    const { status } = await Camera.requestCameraPermissionsAsync()
+    
+    if (status !== 'granted') {
+      alert('Camera permission is required to take photos')
+      return
+    }
+
+    // Launch camera
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 1,
+    })
+
+    if (!result.canceled && result.assets) {
+      const newImage = result.assets[0].uri
+      console.log('NewListingScreen - Photo taken:', newImage)
+      setSelectedImages([...selectedImages, newImage])
+    }
+  }
+
   const handleContinue = () => {
     if (selectedImages.length > 0) {
       // Store images in context
@@ -172,6 +218,18 @@ export default function NewListingScreen() {
               <View style={styles.addPhotoContent}>
                 <PlusIcon />
                 <Text style={styles.addPhotoText}>Add photo</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Camera Button */}
+            <TouchableOpacity
+              style={styles.addPhotoButton}
+              onPress={takePhoto}
+              activeOpacity={0.8}
+            >
+              <View style={styles.addPhotoContent}>
+                <CameraIcon />
+                <Text style={styles.addPhotoText}>Take photo</Text>
               </View>
             </TouchableOpacity>
           </View>
