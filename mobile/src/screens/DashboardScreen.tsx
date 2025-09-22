@@ -83,6 +83,45 @@ const CoinIcon = ({ color = '#F59E0B' }: { color?: string }) => (
   </Svg>
 )
 
+// Grid view icon
+const GridIcon = ({ color = '#6B7280' }: { color?: string }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+// List view icon
+const ListIcon = ({ color = '#6B7280' }: { color?: string }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M4 6h16M4 12h16M4 18h16"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+// Arrow up/down icon for sorting
+const ArrowIcon = ({ direction = 'down', color = '#6B7280' }: { direction?: 'up' | 'down', color?: string }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Path
+      d={direction === 'down' ? "M6 9l6 6 6-6" : "M18 15l-6-6-6 6"}
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
 // Mock data for properties
 const mockProperties = [
   {
@@ -132,14 +171,18 @@ const mockProperties = [
   },
 ]
 
-type FilterTag = 'Newest' | 'Oldest' | 'Beds' | 'Baths'
+type FilterTag = 'Recent' | 'Price'
+type ViewMode = 'grid' | 'list'
+type SortOrder = 'asc' | 'desc'
 
 export default function DashboardScreen() {
   const navigation = useNavigation()
   const { listings } = useListings()
-  const { creditBalance, isLoadingCredits, refreshCredits } = usePhotos()
-  const [selectedFilter, setSelectedFilter] = useState<FilterTag>('Newest')
+  const { creditBalance, isLoadingCredits } = usePhotos()
+  const [selectedFilter, setSelectedFilter] = useState<FilterTag>('Recent')
+  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [searchText, setSearchText] = useState('')
+  const [viewMode, setViewMode] = useState<ViewMode>('grid')
   
   // Debug: Log listings
   console.log('DashboardScreen - listings count:', listings.length)
@@ -148,7 +191,18 @@ export default function DashboardScreen() {
     console.log('DashboardScreen - first listing images:', listings[0].images)
   }
 
-  const filterTags: FilterTag[] = ['Newest', 'Oldest', 'Beds', 'Baths']
+  const filterTags: FilterTag[] = ['Recent', 'Price']
+
+  const handleFilterPress = (tag: FilterTag) => {
+    if (selectedFilter === tag) {
+      // If same filter, toggle sort order
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      // If different filter, set it and default sort order
+      setSelectedFilter(tag)
+      setSortOrder(tag === 'Price' ? 'asc' : 'desc')
+    }
+  }
 
   const handleEnhancePhoto = () => {
     // Navigate to new listing screen
@@ -159,6 +213,10 @@ export default function DashboardScreen() {
     // Navigate to profile/settings screen
     console.log('Navigate to profile')
     // navigation.navigate('Profile' as never)
+  }
+
+  const handleCreditsPress = () => {
+    navigation.navigate('Credits' as never)
   }
 
   const handlePropertyPress = (item: any) => {
@@ -186,24 +244,61 @@ export default function DashboardScreen() {
     } as never)
   }
 
-  const renderPropertyCard = ({ item }: { item: any }) => (
-    <TouchableOpacity 
-      style={styles.propertyCard} 
-      activeOpacity={0.9}
-      onPress={() => handlePropertyPress(item)}
-    >
-      <Image source={item.image} style={styles.propertyImage} />
-      <View style={styles.propertyInfo}>
-        <Text style={styles.propertyAddress}>{item.address}</Text>
-        <View style={styles.propertyDetails}>
-          <Text style={styles.propertyPrice}>{item.price}</Text>
-          <Text style={styles.propertySpecs}>
-            {item.beds} Bed   {item.baths} Bath
+  const renderPropertyCard = ({ item }: { item: any }) => {
+    if (viewMode === 'list') {
+      // List view - original full-width card design
+      return (
+        <TouchableOpacity
+          style={styles.propertyCardList}
+          activeOpacity={0.9}
+          onPress={() => handlePropertyPress(item)}
+        >
+          <Image source={item.image} style={styles.propertyImageList} />
+          {item.isEnhanced && (
+            <View style={styles.enhancedBadgeList}>
+              <Text style={styles.enhancedTextList}>Enhanced</Text>
+            </View>
+          )}
+          <View style={styles.propertyInfoList}>
+            <Text style={styles.propertyAddressList}>{item.address}</Text>
+            <View style={styles.propertyDetailsList}>
+              <Text style={styles.propertyPriceList}>{item.price}</Text>
+              <Text style={styles.propertySpecsList}>
+                {item.beds} Bed   {item.baths} Bath
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      )
+    }
+
+    // Grid view - compact 2-column layout
+    return (
+      <TouchableOpacity
+        style={styles.propertyCard}
+        activeOpacity={0.9}
+        onPress={() => handlePropertyPress(item)}
+      >
+        <Image source={item.image} style={styles.propertyImage} />
+        {item.isEnhanced && (
+          <View style={styles.enhancedBadgeGrid}>
+            <Text style={styles.enhancedTextGrid}>Enhanced</Text>
+          </View>
+        )}
+        <View style={styles.propertyInfo}>
+          <Text style={styles.propertyAddress} numberOfLines={1}>
+            {item.address}
           </Text>
+          <View style={styles.propertyDetails}>
+            <Text style={styles.propertyPrice}>{item.price}</Text>
+            <Text style={styles.propertySpecs}>
+              {item.beds} Bed • {item.baths} Bath
+            </Text>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  )
+      </TouchableOpacity>
+    )
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -214,7 +309,7 @@ export default function DashboardScreen() {
           <View style={styles.headerRight}>
             <TouchableOpacity
               style={styles.creditButton}
-              onPress={refreshCredits}
+              onPress={handleCreditsPress}
               activeOpacity={0.7}
             >
               <LinearGradient
@@ -252,37 +347,61 @@ export default function DashboardScreen() {
           />
         </View>
 
-        {/* Filter Tags */}
-        <View style={styles.filterContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyboardShouldPersistTaps='handled'
-            contentContainerStyle={styles.filterContent}
-          >
-            {filterTags.map((tag) => (
-              <TouchableOpacity
-                key={tag}
-                style={[
-                  styles.filterTag,
-                  selectedFilter === tag && styles.filterTagActive,
-                ]}
-                onPress={() => setSelectedFilter(tag)}
-                activeOpacity={0.7}
-              >
-                <Text
+        {/* Filter Tags and View Toggle */}
+        <View style={styles.filterSection}>
+          <View style={styles.filterContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps='handled'
+              contentContainerStyle={styles.filterContent}
+            >
+              {filterTags.map((tag) => (
+                <TouchableOpacity
+                  key={tag}
                   style={[
-                    styles.filterTagText,
-                    selectedFilter === tag && styles.filterTagTextActive,
+                    styles.filterTag,
+                    selectedFilter === tag && styles.filterTagActive,
                   ]}
-                  allowFontScaling={false}
-                  numberOfLines={1}
+                  onPress={() => handleFilterPress(tag)}
+                  activeOpacity={0.7}
                 >
-                  {tag}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+                  <View style={styles.filterTagContent}>
+                    <Text
+                      style={[
+                        styles.filterTagText,
+                        selectedFilter === tag && styles.filterTagTextActive,
+                      ]}
+                      allowFontScaling={false}
+                      numberOfLines={1}
+                    >
+                      {tag}
+                    </Text>
+                    {selectedFilter === tag && (
+                      <ArrowIcon
+                        direction={sortOrder === 'asc' ? 'up' : 'down'}
+                        color={selectedFilter === tag ? '#4F46E5' : '#6B7280'}
+                      />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+          <View style={styles.viewToggle}>
+            <TouchableOpacity
+              style={[styles.viewButton, viewMode === 'grid' && styles.viewButtonActive]}
+              onPress={() => setViewMode('grid')}
+            >
+              <GridIcon color={viewMode === 'grid' ? '#4F46E5' : '#9CA3AF'} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.viewButton, viewMode === 'list' && styles.viewButtonActive]}
+              onPress={() => setViewMode('list')}
+            >
+              <ListIcon color={viewMode === 'list' ? '#4F46E5' : '#9CA3AF'} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Property List */}
@@ -298,13 +417,19 @@ export default function DashboardScreen() {
               images: listing.images, // Include all enhanced images
               originalImages: listing.originalImages, // Include original images
               isEnhanced: listing.isEnhanced,
+              squareFeet: listing.squareFeet,
             })),
             ...mockProperties,
           ]}
           renderItem={renderPropertyCard}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            viewMode === 'grid' && styles.gridContent
+          ]}
           showsVerticalScrollIndicator={false}
+          numColumns={viewMode === 'grid' ? 2 : 1}
+          key={viewMode} // Force re-render when switching views
         />
       </View>
 
@@ -390,9 +515,9 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   filterContainer: {
-    height: 60, // Fixed height for ScrollView
-    maxHeight: 60,
-    marginBottom: 20,
+    flex: 1,
+    height: 44,
+    maxHeight: 44,
   },
   filterContent: {
     paddingHorizontal: 24,
@@ -450,30 +575,32 @@ const styles = StyleSheet.create({
   propertyCard: {
     backgroundColor: 'white',
     borderRadius: 16,
-    marginBottom: 20,
+    marginBottom: 16,
+    marginHorizontal: 6,
+    flex: 1,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 3,
   },
   propertyImage: {
     width: '100%',
-    height: 200,
+    height: 140,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   },
   propertyInfo: {
-    padding: 16,
+    padding: 12,
   },
   propertyAddress: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   propertyDetails: {
     flexDirection: 'row',
@@ -482,11 +609,11 @@ const styles = StyleSheet.create({
   },
   propertyPrice: {
     fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
+    fontWeight: '700',
+    color: '#4F46E5',
   },
   propertySpecs: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#9CA3AF',
   },
   bottomNavWrapper: {
@@ -550,5 +677,109 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     resizeMode: 'contain',
+  },
+  // New styles for grid/list view and updated filters
+  filterSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    height: 44,
+  },
+  filterTagContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 24,
+  },
+  viewButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+  },
+  viewButtonActive: {
+    backgroundColor: '#EEF2FF',
+  },
+  gridContent: {
+    paddingHorizontal: 18,
+    paddingBottom: 100,
+  },
+  // List view styles - matching original design
+  propertyCardList: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  propertyImageList: {
+    width: '100%',
+    height: 200,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  propertyInfoList: {
+    padding: 16,
+  },
+  propertyAddressList: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 8,
+  },
+  propertyDetailsList: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  propertyPriceList: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  propertySpecsList: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  enhancedBadgeList: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    zIndex: 1,
+  },
+  enhancedTextList: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#16A34A',
+    textTransform: 'uppercase',
+  },
+  enhancedBadgeGrid: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  enhancedTextGrid: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#16A34A',
+    textTransform: 'uppercase',
   },
 })

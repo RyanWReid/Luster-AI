@@ -16,6 +16,7 @@ import {
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import Svg, { Path, Circle } from 'react-native-svg'
+import { LinearGradient } from 'expo-linear-gradient'
 import ImageViewing from 'react-native-image-viewing'
 import { useListings } from '../context/ListingsContext'
 
@@ -439,6 +440,14 @@ export default function GalleryScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Bottom Fade Gradient */}
+      <LinearGradient
+        colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0.95)', 'rgba(255,255,255,1)']}
+        locations={[0, 0.3, 0.7, 1]}
+        style={styles.bottomFadeGradient}
+        pointerEvents="none"
+      />
     </SafeAreaView>
   )
 }
@@ -609,5 +618,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  bottomFadeGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
   },
 })
