@@ -5,29 +5,27 @@ import { useAuth } from '../context/AuthContext'
 import WelcomeScreen from '../screens/WelcomeScreen'
 import AuthScreen from '../screens/AuthScreen'
 import LoginScreen from '../screens/LoginScreen'
-import DashboardScreen from '../screens/DashboardScreen'
 import NewListingScreen from '../screens/NewListingScreen'
 import StyleSelectionScreen from '../screens/StyleSelectionScreen'
 import ConfirmationScreen from '../screens/ConfirmationScreen'
 import ProcessingScreen from '../screens/ProcessingScreen'
 import ResultScreen from '../screens/ResultScreen'
-import GalleryScreen from '../screens/GalleryScreen'
 import ProjectScreen from '../screens/ProjectScreen'
+import CreditsScreen from '../screens/CreditsScreen'
 import MainTabs from './MainTabs'
 
 export type RootStackParamList = {
   Welcome: undefined
   Auth: undefined
   Login: undefined
-  Dashboard: undefined
+  Main: undefined
   NewListing: undefined
   StyleSelection: undefined
   Confirmation: undefined
   Processing: undefined
   Result: undefined
-  Gallery: undefined
   Project: undefined
-  Main: undefined
+  Credits: undefined
 }
 
 const Stack = createStackNavigator<RootStackParamList>()
@@ -44,15 +42,14 @@ export default function RootNavigator() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {user ? (
           <>
-            <Stack.Screen name="Dashboard" component={DashboardScreen} />
+            <Stack.Screen name="Main" component={MainTabs} />
             <Stack.Screen name="NewListing" component={NewListingScreen} />
             <Stack.Screen name="StyleSelection" component={StyleSelectionScreen} />
             <Stack.Screen name="Confirmation" component={ConfirmationScreen} />
             <Stack.Screen name="Processing" component={ProcessingScreen} />
             <Stack.Screen name="Result" component={ResultScreen} />
-            <Stack.Screen name="Gallery" component={GalleryScreen} />
             <Stack.Screen name="Project" component={ProjectScreen} />
-            <Stack.Screen name="Main" component={MainTabs} />
+            <Stack.Screen name="Credits" component={CreditsScreen} />
           </>
         ) : (
           <>

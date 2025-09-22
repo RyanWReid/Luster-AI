@@ -1,14 +1,14 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import { Ionicons } from '@expo/vector-icons'
-import HomeScreen from '../screens/HomeScreen'
-import ShootsScreen from '../screens/ShootsScreen'
-import ProfileScreen from '../screens/ProfileScreen'
+import DashboardScreen from '../screens/DashboardScreenNew'
+import GalleryScreen from '../screens/GalleryScreen'
+import SettingsScreen from '../screens/SettingsScreen'
+import FloatingTabBar from '../components/FloatingTabBar'
 
 export type MainTabParamList = {
-  Home: undefined
-  Shoots: undefined
-  Profile: undefined
+  Dashboard: undefined
+  Gallery: undefined
+  Settings: undefined
 }
 
 const Tab = createBottomTabNavigator<MainTabParamList>()
@@ -16,34 +16,14 @@ const Tab = createBottomTabNavigator<MainTabParamList>()
 export default function MainTabs() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap = 'home'
-
-          if (route.name === 'Home') {
-            iconName = focused ? 'home' : 'home-outline'
-          } else if (route.name === 'Shoots') {
-            iconName = focused ? 'images' : 'images-outline'
-          } else if (route.name === 'Profile') {
-            iconName = focused ? 'person' : 'person-outline'
-          }
-
-          return <Ionicons name={iconName} size={size} color={color} />
-        },
-        tabBarActiveTintColor: '#6366f1',
-        tabBarInactiveTintColor: 'gray',
-        headerStyle: {
-          backgroundColor: '#6366f1',
-        },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-      })}
+      tabBar={(props) => <FloatingTabBar {...props} />}
+      screenOptions={{
+        headerShown: false,
+      }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Enhance' }} />
-      <Tab.Screen name="Shoots" component={ShootsScreen} options={{ title: 'My Shoots' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Gallery" component={GalleryScreen} />
+      <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   )
 }
