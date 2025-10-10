@@ -6,8 +6,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from sqlalchemy import Column, DateTime
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import ForeignKey, Integer, String, Text, create_engine
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import ForeignKey, Integer, String, Text, Uuid, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 
@@ -18,6 +17,10 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
+
+# SQLAlchemy 2.0's Uuid type handles both PostgreSQL UUID and SQLite CHAR(32)
+# Automatically adapts based on database backend
+UUIDType = Uuid
 
 
 class JobStatus(enum.Enum):
@@ -30,7 +33,7 @@ class JobStatus(enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -44,9 +47,9 @@ class User(Base):
 class Credit(Base):
     __tablename__ = "credits"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
     user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, unique=True
+        UUIDType, ForeignKey("users.id"), nullable=False, unique=True
     )
     balance = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -58,8 +61,8 @@ class Credit(Base):
 class Shoot(Base):
     __tablename__ = "shoots"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUIDType, ForeignKey("users.id"), nullable=False)
     name = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -71,9 +74,9 @@ class Shoot(Base):
 class Asset(Base):
     __tablename__ = "assets"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    shoot_id = Column(UUID(as_uuid=True), ForeignKey("shoots.id"), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    shoot_id = Column(UUIDType, ForeignKey("shoots.id"), nullable=False)
+    user_id = Column(UUIDType, ForeignKey("users.id"), nullable=False)
     original_filename = Column(String(255), nullable=False)
     file_path = Column(String(512), nullable=False)
     file_size = Column(Integer, nullable=False)
@@ -89,9 +92,9 @@ class Asset(Base):
 class Job(Base):
     __tablename__ = "jobs"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    asset_id = Column(UUID(as_uuid=True), ForeignKey("assets.id"), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    asset_id = Column(UUIDType, ForeignKey("assets.id"), nullable=False)
+    user_id = Column(UUIDType, ForeignKey("users.id"), nullable=False)
     prompt = Column(Text, nullable=False)
     status = Column(SQLEnum(JobStatus), nullable=False, default=JobStatus.queued)
     output_path = Column(String(512))
@@ -110,8 +113,8 @@ class Job(Base):
 class JobEvent(Base):
     __tablename__ = "job_events"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    job_id = Column(UUID(as_uuid=True), ForeignKey("jobs.id"), nullable=False)
+    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    job_id = Column(UUIDType, ForeignKey("jobs.id"), nullable=False)
     event_type = Column(String(50), nullable=False)
     details = Column(Text)  # JSON as text for simplicity
     created_at = Column(DateTime, default=datetime.utcnow)
