@@ -4,15 +4,18 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  Text,
+  Image,
 } from 'react-native'
 import { BlurView } from 'expo-blur'
-import Svg, { Path, Circle, Rect } from 'react-native-svg'
+import { LinearGradient } from 'expo-linear-gradient'
+import Svg, { Path, Circle } from 'react-native-svg'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+const starLogo = require('../../assets/luster-white-logo.png')
 
 // Minimal icons
 const HomeIcon = ({ color = '#8E8E93', focused = false }) => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Path
       d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"
       stroke={color}
@@ -23,32 +26,9 @@ const HomeIcon = ({ color = '#8E8E93', focused = false }) => (
   </Svg>
 )
 
-const GalleryIcon = ({ color = '#8E8E93', focused = false }) => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
-    <Rect
-      x="3"
-      y="3"
-      width="18"
-      height="18"
-      rx="2"
-      stroke={color}
-      strokeWidth={focused ? "2.5" : "1.5"}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <Circle cx="8.5" cy="8.5" r="1.5" fill={color} />
-    <Path
-      d="M21 15l-5-5L5 21"
-      stroke={color}
-      strokeWidth={focused ? "2.5" : "1.5"}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-)
 
 const SettingsIcon = ({ color = '#8E8E93', focused = false }) => (
-  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Circle
       cx="12"
       cy="12"
@@ -74,8 +54,43 @@ interface TabBarProps {
 export default function FloatingTabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets()
   const scaleAnims = useRef(state.routes.map(() => new Animated.Value(1))).current
+  const shineAnim = useRef(new Animated.Value(0)).current
+  const enhanceShineAnim = useRef(new Animated.Value(-1)).current
+
+  React.useEffect(() => {
+    // Shine animation for enhance button on load
+    setTimeout(() => {
+      Animated.timing(enhanceShineAnim, {
+        toValue: 2,
+        duration: 1500,
+        useNativeDriver: true,
+      }).start()
+    }, 600)
+  }, [])
 
   const handlePress = (route: any, index: number, isFocused: boolean) => {
+    // Special handling for Enhance button (middle button)
+    if (route.name === 'Gallery') {
+      // Navigate to NewListing screen for enhancement
+      navigation.navigate('NewListing')
+
+      // Animate the star
+      Animated.sequence([
+        Animated.timing(scaleAnims[index], {
+          toValue: 0.92,
+          duration: 100,
+          useNativeDriver: true,
+        }),
+        Animated.spring(scaleAnims[index], {
+          toValue: 1,
+          friction: 9,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]).start()
+      return
+    }
+
     const event = navigation.emit({
       type: 'tabPress',
       target: route.key,
@@ -108,8 +123,8 @@ export default function FloatingTabBar({ state, descriptors, navigation }: TabBa
     switch (routeName) {
       case 'Dashboard':
         return <HomeIcon color={color} focused={isFocused} />
-      case 'Gallery':
-        return <GalleryIcon color={color} focused={isFocused} />
+      case 'Gallery':  // This is handled separately as the enhance button
+        return null  // The enhance button has its own rendering
       case 'Settings':
         return <SettingsIcon color={color} focused={isFocused} />
       default:
@@ -117,53 +132,104 @@ export default function FloatingTabBar({ state, descriptors, navigation }: TabBa
     }
   }
 
-  const getLabel = (routeName: string) => {
-    switch (routeName) {
-      case 'Dashboard':
-        return 'Home'
-      case 'Gallery':
-        return 'Gallery'
-      case 'Settings':
-        return 'Settings'
-      default:
-        return routeName
-    }
-  }
 
   return (
     <View style={[styles.container, { paddingBottom: insets.bottom }]}>
-      <BlurView intensity={60} tint="light" style={styles.tabBar}>
+      {/* Enhance button rendered outside and above the tab bar */}
+      {state.routes.map((route: any, index: number) => {
+        if (route.name === 'Gallery') {
+          return (
+            <Animated.View
+              key={`enhance-${route.key}`}
+              style={[
+                styles.enhanceButtonContainer,
+                { transform: [{ scale: scaleAnims[index] }] }
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.enhanceCircleButton}
+                onPress={() => handlePress(route, index, false)}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#D4AF37', '#F4E4C1']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.enhanceCircleGradient}
+                >
+                  <Image
+                    source={starLogo}
+                    style={styles.enhanceLogo}
+                  />
+                  {/* Shine overlay animation */}
+                  <Animated.View
+                    style={[
+                      styles.enhanceShineOverlay,
+                      {
+                        transform: [{
+                          translateX: enhanceShineAnim.interpolate({
+                            inputRange: [-1, 2],
+                            outputRange: [-70, 70],
+                          })
+                        }]
+                      },
+                    ]}
+                  >
+                    <LinearGradient
+                      colors={[
+                        'transparent',
+                        'rgba(255, 255, 255, 0.3)',
+                        'rgba(255, 255, 255, 0.5)',
+                        'rgba(255, 255, 255, 0.3)',
+                        'transparent'
+                      ]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.shineGradient}
+                    />
+                  </Animated.View>
+                </LinearGradient>
+              </TouchableOpacity>
+            </Animated.View>
+          )
+        }
+        return null
+      })}
+
+      <View style={styles.tabBar}>
+        <BlurView intensity={90} tint="light" style={StyleSheet.absoluteFillObject} />
         <View style={styles.tabBarContent}>
           {state.routes.map((route: any, index: number) => {
             const isFocused = state.index === index
             const { options } = descriptors[route.key]
+
+            const isEnhance = route.name === 'Gallery'
 
             return (
               <Animated.View
                 key={route.key}
                 style={[
                   styles.tab,
-                  { transform: [{ scale: scaleAnims[index] }] }
+                  !isEnhance && { transform: [{ scale: scaleAnims[index] }] }
                 ]}
               >
-                <TouchableOpacity
-                  style={styles.tabTouchable}
-                  onPress={() => handlePress(route, index, isFocused)}
-                  activeOpacity={0.7}
-                >
-                  {getIcon(route.name, isFocused)}
-                  <Text style={[
-                    styles.tabLabel,
-                    isFocused ? styles.tabLabelActive : styles.tabLabelInactive
-                  ]}>
-                    {getLabel(route.name)}
-                  </Text>
-                </TouchableOpacity>
+                {isEnhance ? (
+                  // Empty space for the enhance button
+                  <View style={styles.enhancePlaceholder} />
+                ) : (
+                  <TouchableOpacity
+                    style={styles.tabTouchable}
+                    onPress={() => handlePress(route, index, isFocused)}
+                    activeOpacity={0.7}
+                  >
+                    {getIcon(route.name, isFocused)}
+                  </TouchableOpacity>
+                )}
               </Animated.View>
             )
           })}
         </View>
-      </BlurView>
+      </View>
     </View>
   )
 }
@@ -176,23 +242,35 @@ const styles = StyleSheet.create({
     right: 0,
   },
   tabBar: {
-    marginHorizontal: 24,
-    marginBottom: 24,
-    borderRadius: 24,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    borderRadius: 28,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: 'rgba(248, 248, 248, 0.75)',
     borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  enhanceButtonContainer: {
+    position: 'absolute',
+    bottom: 55,  // Position higher above the tab bar
+    left: '50%',
+    marginLeft: -35,  // Half of button width (70/2)
+    zIndex: 10,
+  },
+  enhancePlaceholder: {
+    width: 70,
+    height: 40,
   },
   tabBarContent: {
     flexDirection: 'row',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'transparent',
   },
   tab: {
     flex: 1,
@@ -202,19 +280,46 @@ const styles = StyleSheet.create({
   tabTouchable: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
-    paddingHorizontal: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
-  tabLabel: {
-    fontSize: 11,
-    fontWeight: '500',
-    marginTop: 4,
-    letterSpacing: -0.2,
+  // Enhance Circle Button Styles
+  enhanceCircleButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 15,
+    elevation: 12,
   },
-  tabLabelActive: {
-    color: '#D4AF37',
+  enhanceCircleGradient: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.95)',
   },
-  tabLabelInactive: {
-    color: '#8E8E93',
+  enhanceLogo: {
+    width: 34,
+    height: 34,
+    resizeMode: 'contain',
+  },
+  enhanceShineOverlay: {
+    position: 'absolute',
+    top: -10,
+    left: 0,
+    width: 30,
+    height: 90,
+    borderRadius: 35,
+    overflow: 'hidden',
+  },
+  shineGradient: {
+    width: 30,
+    height: 90,
+    transform: [{ rotate: '25deg' }],
   },
 })
