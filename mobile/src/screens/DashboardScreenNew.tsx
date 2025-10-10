@@ -110,11 +110,13 @@ export default function DashboardScreenNew() {
   const navigation = useNavigation()
   const { listings } = useListings()
   const { creditBalance, isLoadingCredits } = usePhotos()
+  const showMockData = false // Toggle this to true to show mock data cards
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(30)).current
   const scaleAnim = useRef(new Animated.Value(0.95)).current
+  const blobAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
     // Entrance animation
@@ -136,6 +138,22 @@ export default function DashboardScreenNew() {
         useNativeDriver: true,
       }),
     ]).start()
+
+    // Soft blob animation for background
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(blobAnim, {
+          toValue: 1,
+          duration: 8000,
+          useNativeDriver: false,
+        }),
+        Animated.timing(blobAnim, {
+          toValue: 0,
+          duration: 8000,
+          useNativeDriver: false,
+        }),
+      ])
+    ).start()
   }, [])
 
   const handleEnhancePhoto = () => {
@@ -149,6 +167,7 @@ export default function DashboardScreenNew() {
   const handlePropertyPress = (item: any) => {
     navigation.navigate('Project' as never, { property: item } as never)
   }
+
 
   const AnimatedCard = ({ item, index }: { item: any; index: number }) => {
     const cardScale = useRef(new Animated.Value(1)).current
@@ -187,8 +206,23 @@ export default function DashboardScreenNew() {
           onPressOut={handlePressOut}
           onPress={() => handlePropertyPress(item)}
         >
-          <Image source={item.image} style={styles.gridImage} />
-          <BlurView intensity={90} tint="light" style={styles.gridOverlay}>
+          <View style={styles.cardImageContainer}>
+            <Image source={item.image} style={styles.gridImage} />
+            {/* Iridescent gradient overlay */}
+            <LinearGradient
+              colors={['transparent', 'transparent', 'rgba(247, 240, 255, 0.5)', 'rgba(255, 245, 247, 0.8)']}
+              locations={[0, 0.3, 0.7, 1]}
+              style={styles.iridescenOverlay}
+            />
+            <LinearGradient
+              colors={['transparent', 'rgba(240, 248, 255, 0.3)', 'rgba(255, 248, 240, 0.6)']}
+              locations={[0, 0.5, 1]}
+              start={{ x: 1, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.iridescenOverlay}
+            />
+          </View>
+          <BlurView intensity={80} tint="light" style={styles.gridOverlay}>
             <Text style={styles.gridPrice}>{item.price}</Text>
             <Text style={styles.gridAddress} numberOfLines={1}>
               {item.address}
@@ -205,11 +239,65 @@ export default function DashboardScreenNew() {
 
   return (
     <View style={styles.container}>
-      {/* Background gradient */}
-      <LinearGradient
-        colors={['#FFFFFF', '#F8F8FA', '#F0F0F5']}
-        style={styles.backgroundGradient}
-      />
+      {/* Iridescent gradient mesh background */}
+      <Animated.View style={StyleSheet.absoluteFillObject}>
+        <LinearGradient
+          colors={['#FFF5F7', '#F7F0FF', '#F0F8FF', '#FFF8F0']}
+          locations={[0, 0.3, 0.6, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </Animated.View>
+
+      {/* Organic blob animations */}
+      <Animated.View
+        style={[
+          styles.blobContainer1,
+          {
+            transform: [
+              {
+                translateY: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 30],
+                }),
+              },
+              {
+                translateX: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -20],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(255, 182, 193, 0.15)', 'rgba(255, 218, 185, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.blobContainer2,
+          {
+            transform: [
+              {
+                translateY: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -25],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(230, 190, 255, 0.15)', 'rgba(190, 220, 255, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
 
       <SafeAreaView style={styles.safeArea}>
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
@@ -234,7 +322,7 @@ export default function DashboardScreenNew() {
                 style={styles.creditButton}
                 activeOpacity={0.7}
               >
-                <BlurView intensity={20} tint="light" style={styles.creditBlur}>
+                <BlurView intensity={60} tint="light" style={styles.creditBlur}>
                   <CoinIcon size={18} />
                   <Text style={styles.creditText}>{creditBalance || 10}</Text>
                 </BlurView>
@@ -252,62 +340,64 @@ export default function DashboardScreenNew() {
               },
             ]}
           >
-            <BlurView intensity={25} tint="light" style={styles.statCard}>
-              <Text style={styles.statNumber}>24</Text>
+            <BlurView intensity={60} tint="light" style={styles.statCard}>
+              <Text style={styles.statNumber}>0</Text>
               <Text style={styles.statLabel}>Properties</Text>
               <View style={styles.statTrend}>
-                <TrendingIcon size={14} color="#4CAF50" />
-                <Text style={styles.statChange}>+12%</Text>
+                <TrendingIcon size={14} color="#9E9E9E" />
+                <Text style={styles.statChange}>--</Text>
               </View>
             </BlurView>
 
-            <BlurView intensity={25} tint="light" style={styles.statCard}>
-              <Text style={styles.statNumber}>18</Text>
+            <BlurView intensity={60} tint="light" style={styles.statCard}>
+              <Text style={styles.statNumber}>0</Text>
               <Text style={styles.statLabel}>Enhanced</Text>
               <View style={styles.statTrend}>
                 <StarIcon size={12} />
-                <Text style={styles.statChange}>75%</Text>
+                <Text style={styles.statChange}>0%</Text>
               </View>
             </BlurView>
 
-            <BlurView intensity={25} tint="light" style={styles.statCard}>
-              <Text style={styles.statNumber}>$2.4M</Text>
+            <BlurView intensity={60} tint="light" style={styles.statCard}>
+              <Text style={styles.statNumber}>$0</Text>
               <Text style={styles.statLabel}>Total Value</Text>
               <View style={styles.statTrend}>
-                <TrendingIcon size={14} color="#4CAF50" />
-                <Text style={styles.statChange}>+8%</Text>
+                <TrendingIcon size={14} color="#9E9E9E" />
+                <Text style={styles.statChange}>--</Text>
               </View>
             </BlurView>
           </Animated.View>
 
 
-          {/* Recent Properties */}
-          <Animated.View
-            style={[
-              styles.propertiesSection,
-              {
-                opacity: fadeAnim,
-              },
-            ]}
-          >
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Recent Properties</Text>
-              <TouchableOpacity activeOpacity={0.7}>
-                <Text style={styles.seeAll}>See All</Text>
-              </TouchableOpacity>
-            </View>
+          {/* Recent Properties - Only show if showMockData is true */}
+          {showMockData && (
+            <Animated.View
+              style={[
+                styles.propertiesSection,
+                {
+                  opacity: fadeAnim,
+                },
+              ]}
+            >
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Recent Properties</Text>
+                <TouchableOpacity activeOpacity={0.7}>
+                  <Text style={styles.seeAll}>See All</Text>
+                </TouchableOpacity>
+              </View>
 
-            <FlatList
-                data={mockProperties}
-                renderItem={({ item, index }) => <AnimatedCard item={item} index={index} />}
-                keyExtractor={(item) => item.id}
-                horizontal={false}
-                numColumns={2}
-                scrollEnabled={false}
-                columnWrapperStyle={styles.propertyRow}
-                contentContainerStyle={styles.propertyGrid}
-            />
-          </Animated.View>
+              <FlatList
+                  data={mockProperties}
+                  renderItem={({ item, index }) => <AnimatedCard item={item} index={index} />}
+                  keyExtractor={(item) => item.id}
+                  horizontal={false}
+                  numColumns={2}
+                  scrollEnabled={false}
+                  columnWrapperStyle={styles.propertyRow}
+                  contentContainerStyle={styles.propertyGrid}
+              />
+            </Animated.View>
+          )}
 
           <View style={styles.bottomSpacer} />
         </ScrollView>
@@ -335,6 +425,26 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
+  },
+  // Organic Blobs
+  blobContainer1: {
+    position: 'absolute',
+    top: -100,
+    left: -100,
+    width: 400,
+    height: 400,
+  },
+  blobContainer2: {
+    position: 'absolute',
+    bottom: -150,
+    right: -150,
+    width: 450,
+    height: 450,
+  },
+  blob: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
   },
   safeArea: {
     flex: 1,
@@ -377,7 +487,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     gap: 6,
   },
   creditText: {
@@ -396,8 +508,11 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    overflow: 'hidden',
   },
   statNumber: {
     fontSize: 24,
@@ -462,9 +577,19 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
   },
+  cardImageContainer: {
+    position: 'relative',
+  },
   gridImage: {
     width: '100%',
     height: 140,
+  },
+  iridescenOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
   },
   gridOverlay: {
     position: 'absolute',

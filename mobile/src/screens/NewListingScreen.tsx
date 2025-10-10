@@ -1,27 +1,34 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Image,
   ScrollView,
+  Animated,
+  Easing,
+  Dimensions,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import * as ImagePicker from 'expo-image-picker'
 import { Camera } from 'expo-camera'
 import { LinearGradient } from 'expo-linear-gradient'
+import { BlurView } from 'expo-blur'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { usePhotos } from '../context/PhotoContext'
+import hapticFeedback from '../utils/haptics'
 
-// Close icon
-const CloseIcon = () => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+const { width } = Dimensions.get('window')
+
+// Back icon
+const BackIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path
-      d="M18 6L6 18M6 6l12 12"
-      stroke="#374151"
-      strokeWidth="2"
+      d="M15 18l-6-6 6-6"
+      stroke="#111827"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -30,10 +37,10 @@ const CloseIcon = () => (
 
 // Plus icon
 const PlusIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Path
       d="M12 5v14m-7-7h14"
-      stroke="#92400E"
+      stroke="#D4AF37"
       strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -46,7 +53,7 @@ const CameraIcon = () => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Path
       d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2v11z"
-      stroke="#92400E"
+      stroke="#D4AF37"
       strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -55,8 +62,21 @@ const CameraIcon = () => (
       cx="12"
       cy="13"
       r="4"
-      stroke="#92400E"
+      stroke="#D4AF37"
       strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+// Close icon for removing photos
+const CloseIcon = () => (
+  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M18 6L6 18M6 6l12 12"
+      stroke="#111827"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -71,35 +91,15 @@ interface StepIndicatorProps {
 const StepIndicator = ({ currentStep, totalSteps }: StepIndicatorProps) => {
   return (
     <View style={styles.stepContainer}>
-      {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step, index) => (
-        <React.Fragment key={step}>
-          <TouchableOpacity
-            style={[
-              styles.stepCircle,
-              step === currentStep && styles.stepCircleActive,
-              step < currentStep && styles.stepCircleCompleted,
-            ]}
-            disabled={step > currentStep}
-          >
-            <Text
-              style={[
-                styles.stepText,
-                step === currentStep && styles.stepTextActive,
-                step < currentStep && styles.stepTextCompleted,
-              ]}
-            >
-              {step < currentStep ? '✓' : step === currentStep ? `Step ${step}` : step}
-            </Text>
-          </TouchableOpacity>
-          {index < totalSteps - 1 && (
-            <View
-              style={[
-                styles.stepLine,
-                step < currentStep && styles.stepLineCompleted,
-              ]}
-            />
-          )}
-        </React.Fragment>
+      {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
+        <View
+          key={step}
+          style={[
+            styles.stepDot,
+            step === currentStep && styles.stepDotActive,
+            step < currentStep && styles.stepDotCompleted,
+          ]}
+        />
       ))}
     </View>
   )
@@ -111,18 +111,58 @@ export default function NewListingScreen() {
   const [selectedImages, setSelectedImages] = useState<string[]>([])
   const [currentStep] = useState(1)
 
-  // Initialize with photos from context if available
+  // Animation refs
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const scaleAnim = useRef(new Animated.Value(0.95)).current
+  const blobAnim = useRef(new Animated.Value(0)).current
+
   useEffect(() => {
+    // Initialize with photos from context if available
     if (selectedPhotos.length > 0) {
       setSelectedImages(selectedPhotos)
     }
+
+    // Entrance animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start()
+
+    // Background blob animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(blobAnim, {
+          toValue: 1,
+          duration: 8000,
+          useNativeDriver: false,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(blobAnim, {
+          toValue: 0,
+          duration: 8000,
+          useNativeDriver: false,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ])
+    ).start()
   }, [])
 
   const handleClose = () => {
+    hapticFeedback.light()
     navigation.goBack()
   }
 
   const pickImage = async () => {
+    hapticFeedback.medium()
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
@@ -131,22 +171,22 @@ export default function NewListingScreen() {
     })
 
     if (!result.canceled && result.assets) {
-      const newImages = result.assets.map(asset => asset.uri)
+      const newImages = result.assets.map((asset) => asset.uri)
       console.log('NewListingScreen - Images picked:', newImages)
       setSelectedImages([...selectedImages, ...newImages])
+      hapticFeedback.notification('success')
     }
   }
 
   const takePhoto = async () => {
-    // Request camera permission
+    hapticFeedback.medium()
     const { status } = await Camera.requestCameraPermissionsAsync()
-    
+
     if (status !== 'granted') {
       alert('Camera permission is required to take photos')
       return
     }
 
-    // Launch camera
     const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: false,
@@ -157,117 +197,217 @@ export default function NewListingScreen() {
       const newImage = result.assets[0].uri
       console.log('NewListingScreen - Photo taken:', newImage)
       setSelectedImages([...selectedImages, newImage])
+      hapticFeedback.notification('success')
     }
   }
 
   const handleContinue = () => {
     if (selectedImages.length > 0) {
-      // Store images in context
+      hapticFeedback.medium()
       console.log('NewListingScreen - Storing images:', selectedImages)
       setSelectedPhotos(selectedImages)
-      // Navigate to style selection (step 2)
       navigation.navigate('StyleSelection' as never)
     }
   }
 
   const removeImage = (index: number) => {
+    hapticFeedback.light()
     setSelectedImages(selectedImages.filter((_, i) => i !== index))
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>New Listing</Text>
-        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-          <CloseIcon />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      {/* Iridescent gradient background */}
+      <LinearGradient
+        colors={['#FFF5F7', '#F7F0FF', '#F0F8FF', '#FFF8F0']}
+        locations={[0, 0.3, 0.6, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
 
-      {/* Step Indicator */}
-      <StepIndicator currentStep={currentStep} totalSteps={3} />
+      {/* Organic blob animations */}
+      <Animated.View
+        style={[
+          styles.blobContainer1,
+          {
+            transform: [
+              {
+                translateY: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 30],
+                }),
+              },
+              {
+                translateX: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -20],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(255, 182, 193, 0.15)', 'rgba(255, 218, 185, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Add Photo Section */}
-        <View style={styles.photoSection}>
-          <Text style={styles.sectionTitle}>Add photo</Text>
-          <Text style={styles.sectionDescription}>
-            Upload an interior or exterior photo
-          </Text>
+      <Animated.View
+        style={[
+          styles.blobContainer2,
+          {
+            transform: [
+              {
+                translateY: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -25],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(230, 190, 255, 0.15)', 'rgba(190, 220, 255, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
 
-          {/* Photo Upload Area */}
-          <View style={styles.photoGrid}>
-            {selectedImages.map((uri, index) => (
-              <View key={index} style={styles.photoItem}>
-                <Image source={{ uri }} style={styles.uploadedPhoto} />
-                <TouchableOpacity
-                  style={styles.removePhotoButton}
-                  onPress={() => removeImage(index)}
-                >
-                  <CloseIcon />
-                </TouchableOpacity>
-              </View>
-            ))}
-
-            {/* Add Photo Button */}
-            <TouchableOpacity
-              style={styles.addPhotoButton}
-              onPress={pickImage}
-              activeOpacity={0.8}
-            >
-              <View style={styles.addPhotoContent}>
-                <PlusIcon />
-                <Text style={styles.addPhotoText}>Add photo</Text>
-              </View>
-            </TouchableOpacity>
-
-            {/* Camera Button */}
-            <TouchableOpacity
-              style={styles.addPhotoButton}
-              onPress={takePhoto}
-              activeOpacity={0.8}
-            >
-              <View style={styles.addPhotoContent}>
-                <CameraIcon />
-                <Text style={styles.addPhotoText}>Take photo</Text>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          {selectedImages.length === 0 && (
-            <Text style={styles.uploadHint}>Upload an interior photo</Text>
-          )}
-        </View>
-      </ScrollView>
-
-      {/* Continue Button */}
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity
-          onPress={handleContinue}
-          disabled={selectedImages.length === 0}
-          activeOpacity={0.8}
-          style={styles.continueButtonTouchable}
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header */}
+        <Animated.View
+          style={[
+            styles.header,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
         >
-          <LinearGradient
-            colors={selectedImages.length === 0 ? ['#D1D5DB', '#D1D5DB'] : ['#fbbf24', '#f59e0b']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.continueButton}
+          <TouchableOpacity onPress={handleClose} style={styles.backButton}>
+            <BlurView intensity={60} tint="light" style={styles.backButtonBlur}>
+              <BackIcon />
+            </BlurView>
+          </TouchableOpacity>
+
+          <Text style={styles.headerTitle}>New Listing</Text>
+
+          <View style={styles.backButton} />
+        </Animated.View>
+
+        {/* Step Indicator */}
+        <Animated.View
+          style={[
+            styles.stepIndicatorWrapper,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          <StepIndicator currentStep={currentStep} totalSteps={3} />
+        </Animated.View>
+
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <Animated.View
+            style={[
+              styles.mainSection,
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
           >
-            <Text style={styles.continueButtonText}>Continue</Text>
-            <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8 }}>
-              <Path
-                d="M5 12h14m-7-7l7 7-7 7"
-                stroke="white"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </Svg>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+            <Text style={styles.sectionTitle}>Add photo</Text>
+            <Text style={styles.sectionDescription}>
+              Upload interior or exterior photos
+            </Text>
+
+            {/* Photo Grid */}
+            <View style={styles.photoGrid}>
+              {selectedImages.map((uri, index) => (
+                <Animated.View key={index} style={styles.photoItem}>
+                  <BlurView intensity={40} tint="light" style={styles.photoCard}>
+                    <Image source={{ uri }} style={styles.uploadedPhoto} />
+                    <TouchableOpacity
+                      style={styles.removePhotoButton}
+                      onPress={() => removeImage(index)}
+                    >
+                      <BlurView intensity={80} tint="light" style={styles.removeButtonBlur}>
+                        <CloseIcon />
+                      </BlurView>
+                    </TouchableOpacity>
+                  </BlurView>
+                </Animated.View>
+              ))}
+            </View>
+
+            {/* Upload Buttons */}
+            <View style={styles.uploadButtons}>
+              <TouchableOpacity onPress={pickImage} activeOpacity={0.8} style={styles.uploadButton}>
+                <BlurView intensity={60} tint="light" style={styles.uploadButtonBlur}>
+                  <PlusIcon />
+                  <Text style={styles.uploadButtonText}>Add photo</Text>
+                </BlurView>
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={takePhoto} activeOpacity={0.8} style={styles.uploadButton}>
+                <BlurView intensity={60} tint="light" style={styles.uploadButtonBlur}>
+                  <CameraIcon />
+                  <Text style={styles.uploadButtonText}>Take photo</Text>
+                </BlurView>
+              </TouchableOpacity>
+            </View>
+
+            {selectedImages.length === 0 && (
+              <Text style={styles.uploadHint}>Start by uploading your first photo</Text>
+            )}
+          </Animated.View>
+        </ScrollView>
+
+        {/* Continue Button */}
+        <Animated.View
+          style={[
+            styles.bottomContainer,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={handleContinue}
+            disabled={selectedImages.length === 0}
+            activeOpacity={0.8}
+            style={styles.continueButtonTouchable}
+          >
+            <LinearGradient
+              colors={
+                selectedImages.length === 0 ? ['#D1D5DB', '#D1D5DB'] : ['#D4AF37', '#B8860B']
+              }
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.continueButton}
+            >
+              <Text style={styles.continueButtonText}>Continue</Text>
+              <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" style={{ marginLeft: 8 }}>
+                <Path
+                  d="M5 12h14m-7-7l7 7-7 7"
+                  stroke="white"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
+      </SafeAreaView>
+    </View>
   )
 }
 
@@ -276,163 +416,197 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  blobContainer1: {
+    position: 'absolute',
+    top: -100,
+    left: -100,
+    width: 400,
+    height: 400,
+  },
+  blobContainer2: {
+    position: 'absolute',
+    bottom: -150,
+    right: -150,
+    width: 450,
+    height: 450,
+  },
+  blob: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
+  },
+  safeArea: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 20,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  closeButton: {
+  backButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  backButtonBlur: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  stepIndicatorWrapper: {
+    paddingHorizontal: 24,
+    marginBottom: 32,
   },
   stepContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 32,
+    justifyContent: 'center',
+    gap: 8,
   },
-  stepCircle: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
-  stepCircleActive: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#FCD34D',
+  stepDotActive: {
+    width: 24,
+    height: 8,
+    backgroundColor: '#D4AF37',
   },
-  stepCircleCompleted: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
-  },
-  stepText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#9CA3AF',
-  },
-  stepTextActive: {
-    color: '#92400E',
-    fontWeight: '600',
-  },
-  stepTextCompleted: {
-    color: '#FFFFFF',
-  },
-  stepLine: {
-    flex: 1,
-    height: 1.5,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 8,
-  },
-  stepLineCompleted: {
+  stepDotCompleted: {
     backgroundColor: '#10B981',
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
+  },
+  mainSection: {
     paddingHorizontal: 24,
   },
-  photoSection: {
-    flex: 1,
-  },
   sectionTitle: {
-    fontSize: 24,
-    fontWeight: '600',
+    fontSize: 28,
+    fontWeight: '700',
     color: '#111827',
     marginBottom: 8,
+    letterSpacing: -0.5,
   },
   sectionDescription: {
     fontSize: 16,
     color: '#6B7280',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   photoGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginHorizontal: -8,
+    marginHorizontal: -6,
   },
   photoItem: {
-    width: '50%',
-    padding: 8,
+    width: (width - 48 - 24) / 2,
     aspectRatio: 1,
+    padding: 6,
+  },
+  photoCard: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   uploadedPhoto: {
     width: '100%',
     height: '100%',
-    borderRadius: 12,
   },
   removePhotoButton: {
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: 8,
+    right: 8,
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    overflow: 'hidden',
+  },
+  removeButtonBlur: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
-  addPhotoButton: {
-    width: '100%',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    borderRadius: 24,
-    backgroundColor: '#FEF3C7',
-    borderWidth: 1.5,
-    borderColor: '#FCD34D',
-    marginTop: 24,
+  uploadButtons: {
+    marginTop: 20,
+    gap: 12,
   },
-  addPhotoContent: {
+  uploadButton: {
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  uploadButtonBlur: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    gap: 12,
   },
-  addPhotoText: {
+  uploadButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#92400E',
-    marginLeft: 8,
+    color: '#111827',
   },
   uploadHint: {
     fontSize: 14,
     color: '#9CA3AF',
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 24,
   },
   bottomContainer: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 34,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    paddingBottom: 16,
   },
   continueButtonTouchable: {
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   continueButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 18,
+    borderRadius: 16,
   },
   continueButtonText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
     color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
 })
