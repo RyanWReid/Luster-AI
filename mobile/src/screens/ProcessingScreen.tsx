@@ -4,51 +4,71 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Image,
   Animated,
   Easing,
   Alert,
+  Dimensions,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
+import { LinearGradient } from 'expo-linear-gradient'
+import { BlurView } from 'expo-blur'
 import Svg, { Path } from 'react-native-svg'
 import { usePhotos } from '../context/PhotoContext'
 import { useListings } from '../context/ListingsContext'
 import enhancementService from '../services/enhancementService'
+import hapticFeedback from '../utils/haptics'
 
-// Close icon
-const CloseIcon = () => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+const { width } = Dimensions.get('window')
+
+// Back icon
+const BackIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path
-      d="M18 6L6 18M6 6l12 12"
-      stroke="#374151"
-      strokeWidth="2"
+      d="M15 18l-6-6 6-6"
+      stroke="#111827"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
   </Svg>
 )
 
-// Sparkle icon component with animation support
-const SparkleIcon = ({ size = 60 }: { size?: number }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M12 2v6m0 8v6M6 12h6m8 0h-6"
-      stroke="#111827"
-      strokeWidth="2"
-      strokeLinecap="round"
+// Bouncing Dots Component
+interface BouncingDotsProps {
+  bounce1: Animated.Value
+  bounce2: Animated.Value
+  bounce3: Animated.Value
+}
+
+const BouncingDots = ({ bounce1, bounce2, bounce3 }: BouncingDotsProps) => (
+  <View style={styles.dotsContainer}>
+    <Animated.View
+      style={[
+        styles.dot,
+        {
+          transform: [{ translateY: bounce1 }],
+        },
+      ]}
     />
-    <Path
-      d="M12 8a1 1 0 011 1v2h2a1 1 0 110 2h-2v2a1 1 0 11-2 0v-2H9a1 1 0 110-2h2V9a1 1 0 011-1z"
-      fill="#111827"
+    <Animated.View
+      style={[
+        styles.dot,
+        {
+          transform: [{ translateY: bounce2 }],
+        },
+      ]}
     />
-    <Path
-      d="M5.5 5.5l2 2m9 9l2 2m0-13l-2 2m-9 9l-2 2"
-      stroke="#111827"
-      strokeWidth="1.5"
-      strokeLinecap="round"
+    <Animated.View
+      style={[
+        styles.dot,
+        {
+          transform: [{ translateY: bounce3 }],
+        },
+      ]}
     />
-  </Svg>
+  </View>
 )
 
 export default function ProcessingScreen() {
@@ -57,57 +77,91 @@ export default function ProcessingScreen() {
   const { selectedPhotos, setEnhancedPhotos } = usePhotos()
   const { addListing } = useListings()
   const firstImage = selectedPhotos[0] || null
-  
+
   // Get parameters from previous screen
   const params = route.params as any
   const style = params?.style || 'luster'
   const photos = params?.photos || selectedPhotos
   const photoCount = params?.photoCount || photos.length
-  
+
   // State for tracking progress
   const [processedCount, setProcessedCount] = useState(0)
-  const [currentStatus, setCurrentStatus] = useState('Starting enhancement...')
+  const [currentStatus, setCurrentStatus] = useState('Analyzing your photos...')
   const [enhancedUrls, setEnhancedUrls] = useState<string[]>([])
-  
-  // Debug: Log selected photos
-  console.log('ProcessingScreen - selectedPhotos:', selectedPhotos)
-  console.log('ProcessingScreen - firstImage:', firstImage)
-  console.log('ProcessingScreen - style:', style)
-  
-  const rotateAnim = useRef(new Animated.Value(0)).current
-  const pulseAnim = useRef(new Animated.Value(1)).current
+  const [canDismiss, setCanDismiss] = useState(false)
+
+  // Animation refs
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const scaleAnim = useRef(new Animated.Value(0.9)).current
+  const bounce1 = useRef(new Animated.Value(0)).current
+  const bounce2 = useRef(new Animated.Value(0)).current
+  const bounce3 = useRef(new Animated.Value(0)).current
+  const blobAnim = useRef(new Animated.Value(0)).current
   const shimmerAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
-    // Rotation animation for sparkle icon
-    Animated.loop(
-      Animated.timing(rotateAnim, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start()
+    // Haptic feedback on start
+    hapticFeedback.light()
 
-    // Pulse animation for sparkle icon
+    // Entrance animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start()
+
+    // Background blob animation
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.2,
-          duration: 1000,
-          easing: Easing.ease,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
+        Animated.timing(blobAnim, {
           toValue: 1,
-          duration: 1000,
-          easing: Easing.ease,
-          useNativeDriver: true,
+          duration: 8000,
+          useNativeDriver: false,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(blobAnim, {
+          toValue: 0,
+          duration: 8000,
+          useNativeDriver: false,
+          easing: Easing.inOut(Easing.ease),
         }),
       ])
     ).start()
 
-    // Shimmer animation for small sparkles
+    // Bouncing dots animations
+    const createBounce = (animValue: Animated.Value, delay: number) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(animValue, {
+            toValue: -12,
+            duration: 400,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(animValue, {
+            toValue: 0,
+            duration: 400,
+            easing: Easing.in(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start()
+    }
+
+    createBounce(bounce1, 0)
+    createBounce(bounce2, 150)
+    createBounce(bounce3, 300)
+
+    // Shimmer effect for image
     Animated.loop(
       Animated.sequence([
         Animated.timing(shimmerAnim, {
@@ -124,35 +178,40 @@ export default function ProcessingScreen() {
         }),
       ])
     ).start()
+  }, [])
 
-    // Process images with real API
-    const processImages = async () => {
+  useEffect(() => {
+    async function processImages() {
       try {
-        setCurrentStatus('Uploading images...')
-        
-        // For demo/testing, we'll use the local image URIs as URLs
-        // In production, you'd upload these to R2 first and get proper URLs
-        const imageUrls = photos.map((photo: string) => photo)
-        
-        setCurrentStatus('Enhancing images with AI...')
-        
-        // Process all images
-        const results = await enhancementService.enhanceMultipleImages(
-          imageUrls,
-          style as 'luster' | 'flambient',
-          (completed, total, status) => {
-            setProcessedCount(completed)
-            setCurrentStatus(`Processing image ${completed} of ${total}...`)
+        setCurrentStatus('Preparing your photos...')
+        await new Promise((resolve) => setTimeout(resolve, 500))
+
+        const results: string[] = []
+
+        for (let i = 0; i < photos.length; i++) {
+          setCurrentStatus(`Enhancing photo ${i + 1} of ${photos.length}...`)
+          setProcessedCount(i + 1)
+
+          // Allow dismissing after first photo starts
+          if (i === 0) {
+            setCanDismiss(true)
           }
-        )
-        
-        // Store enhanced URLs
+
+          const result = await enhancementService.enhanceImage({
+            imageUrl: photos[i],
+            style: style as any,
+          })
+          results.push(result)
+        }
+
+        // Success haptic
+        hapticFeedback.notification('success')
+
         setEnhancedUrls(results)
         if (setEnhancedPhotos) {
           setEnhancedPhotos(results)
         }
-        
-        // Add to listings if we have results
+
         if (results.length > 0 && results[0]) {
           addListing({
             address: 'New Listing',
@@ -163,129 +222,210 @@ export default function ProcessingScreen() {
             isEnhanced: true,
           })
         }
-        
+
         // Navigate to results
         navigation.navigate('Result' as never, {
           enhancedPhotos: results,
           originalPhotos: photos,
-          style: style
+          style: style,
         })
       } catch (error) {
         console.error('Enhancement failed:', error)
+        hapticFeedback.notification('error')
         Alert.alert(
           'Enhancement Failed',
           'There was an error processing your images. Please try again.',
           [
             {
               text: 'OK',
-              onPress: () => navigation.navigate('Dashboard' as never)
-            }
+              onPress: () => navigation.navigate('Main' as never),
+            },
           ]
         )
       }
     }
-    
-    // Start processing after a short delay for UI to settle
+
     const timer = setTimeout(() => {
       processImages()
     }, 500)
-    
-    return () => clearTimeout(timer)
-  }, [navigation, rotateAnim, pulseAnim, shimmerAnim])
 
-  const handleClose = () => {
-    // Show confirmation dialog or cancel processing
-    navigation.navigate('Dashboard' as never)
+    return () => clearTimeout(timer)
+  }, [])
+
+  const handleBack = () => {
+    if (canDismiss) {
+      hapticFeedback.light()
+      Alert.alert(
+        'Leave Processing?',
+        "We'll notify you when your photos are ready. You can check back anytime.",
+        [
+          { text: 'Stay', style: 'cancel' },
+          {
+            text: 'Check Back Later',
+            onPress: () => navigation.navigate('Main' as never),
+          },
+        ]
+      )
+    } else {
+      navigation.goBack()
+    }
   }
 
-  const spin = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  })
-
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
-          <Animated.View
-            style={[
-              styles.sparkleContainer,
-              {
-                transform: [{ rotate: spin }, { scale: pulseAnim }],
-              },
-            ]}
-          >
-            <SparkleIcon size={50} />
-          </Animated.View>
-          
-          {/* Small animated sparkles */}
-          <Animated.View
-            style={[
-              styles.smallSparkle,
-              styles.sparkleTop,
-              { opacity: shimmerAnim },
-            ]}
-          >
-            <Text style={styles.sparkleText}>✨</Text>
-          </Animated.View>
-          <Animated.View
-            style={[
-              styles.smallSparkle,
-              styles.sparkleBottom,
-              { opacity: shimmerAnim },
-            ]}
-          >
-            <Text style={styles.sparkleText}>✨</Text>
-          </Animated.View>
-          
-          <Text style={styles.title}>
-            {processedCount > 0 ? `Enhancing ${processedCount} of ${photoCount}` : 'Analyzing images'}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-          <CloseIcon />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      {/* Iridescent gradient background */}
+      <LinearGradient
+        colors={['#FFF5F7', '#F7F0FF', '#F0F8FF', '#FFF8F0']}
+        locations={[0, 0.3, 0.6, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
 
-      {/* Main Content */}
-      <View style={styles.content}>
-        {/* Status Message */}
-        <Text style={styles.statusMessage}>
-          {currentStatus || 'Please don\'t close the app or lock your device'}
-        </Text>
-
-        {/* Preview Image */}
-        <View style={styles.imageContainer}>
-          <Image
-            source={firstImage ? { uri: firstImage } : require('../../assets/photo.png')}
-            style={styles.previewImage}
-            resizeMode="cover"
-          />
-          
-          {/* Animated overlay to show processing */}
-          <Animated.View
-            style={[
-              styles.processingOverlay,
+      {/* Organic blob animations */}
+      <Animated.View
+        style={[
+          styles.blobContainer1,
+          {
+            transform: [
               {
-                opacity: shimmerAnim.interpolate({
+                translateY: blobAnim.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0.3, 0],
+                  outputRange: [0, 30],
                 }),
               },
-            ]}
-          />
-        </View>
+              {
+                translateX: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -20],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(255, 182, 193, 0.15)', 'rgba(255, 218, 185, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
 
-        {/* Footer Messages */}
-        <View style={styles.footer}>
-          <Text style={styles.footerTitle}>Good things take time...</Text>
-          <Text style={styles.footerSubtitle}>
-            epic things take a few more seconds
-          </Text>
-        </View>
-      </View>
-    </SafeAreaView>
+      <Animated.View
+        style={[
+          styles.blobContainer2,
+          {
+            transform: [
+              {
+                translateY: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -25],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(230, 190, 255, 0.15)', 'rgba(190, 220, 255, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
+
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header */}
+        <Animated.View
+          style={[
+            styles.header,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <BlurView intensity={60} tint="light" style={styles.backButtonBlur}>
+              <BackIcon />
+            </BlurView>
+          </TouchableOpacity>
+
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Enhancing</Text>
+            <Text style={styles.headerSubtitle}>
+              {processedCount > 0 ? `${processedCount} of ${photoCount}` : `${photoCount} photos`}
+            </Text>
+          </View>
+
+          <View style={styles.backButton} />
+        </Animated.View>
+
+        {/* Main Content */}
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
+          {/* Bouncing Dots */}
+          <BouncingDots bounce1={bounce1} bounce2={bounce2} bounce3={bounce3} />
+
+          {/* Status Text */}
+          <Text style={styles.statusText}>{currentStatus}</Text>
+
+          {/* Photo Count */}
+          {processedCount > 0 && (
+            <Text style={styles.countText}>
+              {processedCount} / {photoCount}
+            </Text>
+          )}
+
+          {/* Preview Image Card */}
+          {firstImage && (
+            <BlurView intensity={40} tint="light" style={styles.imageCard}>
+              <View style={styles.imageWrapper}>
+                <Image
+                  source={{ uri: firstImage }}
+                  style={styles.previewImage}
+                  resizeMode="cover"
+                />
+                <Animated.View
+                  style={[
+                    styles.imageShimmer,
+                    {
+                      opacity: shimmerAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.3, 0],
+                      }),
+                    },
+                  ]}
+                />
+              </View>
+            </BlurView>
+          )}
+
+          {/* Info Message */}
+          {canDismiss && (
+            <Animated.View
+              style={[
+                styles.infoCard,
+                {
+                  opacity: fadeAnim,
+                },
+              ]}
+            >
+              <BlurView intensity={60} tint="light" style={styles.infoCardBlur}>
+                <Text style={styles.infoTitle}>You can leave anytime</Text>
+                <Text style={styles.infoText}>
+                  We'll notify you when your photos are ready
+                </Text>
+              </BlurView>
+            </Animated.View>
+          )}
+        </Animated.View>
+      </SafeAreaView>
+    </View>
   )
 }
 
@@ -294,89 +434,150 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  blobContainer1: {
+    position: 'absolute',
+    top: -100,
+    left: -100,
+    width: 400,
+    height: 400,
+  },
+  blobContainer2: {
+    position: 'absolute',
+    bottom: -150,
+    right: -150,
+    width: 450,
+    height: 450,
+  },
+  blob: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
+  },
+  safeArea: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingTop: 8,
+    paddingBottom: 24,
   },
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    position: 'relative',
-  },
-  sparkleContainer: {
-    marginRight: 12,
-  },
-  smallSparkle: {
-    position: 'absolute',
-  },
-  sparkleTop: {
-    top: -8,
-    left: 35,
-  },
-  sparkleBottom: {
-    bottom: -8,
-    left: 45,
-  },
-  sparkleText: {
-    fontSize: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  closeButton: {
+  backButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  backButtonBlur: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  headerTextContainer: {
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6B7280',
   },
   content: {
     flex: 1,
     paddingHorizontal: 24,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 40,
   },
-  statusMessage: {
-    fontSize: 18,
-    color: '#6B7280',
-    textAlign: 'center',
+  dotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
     marginBottom: 40,
+    height: 40,
   },
-  imageContainer: {
-    flex: 1,
-    maxHeight: 400,
-    borderRadius: 20,
+  dot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#D4AF37',
+  },
+  statusText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    textAlign: 'center',
+    marginBottom: 16,
+    letterSpacing: -0.3,
+  },
+  countText: {
+    fontSize: 48,
+    fontWeight: '700',
+    color: '#D4AF37',
+    textAlign: 'center',
+    marginBottom: 32,
+    letterSpacing: -1,
+  },
+  imageCard: {
+    width: '100%',
+    borderRadius: 24,
     overflow: 'hidden',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  imageWrapper: {
+    width: '100%',
+    height: 240,
     position: 'relative',
   },
   previewImage: {
     width: '100%',
     height: '100%',
   },
-  processingOverlay: {
+  imageShimmer: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
-  footer: {
-    paddingVertical: 60,
+  infoCard: {
+    width: '100%',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  infoCardBlur: {
+    padding: 20,
+    backgroundColor: 'rgba(212, 175, 55, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(212, 175, 55, 0.3)',
     alignItems: 'center',
   },
-  footerTitle: {
-    fontSize: 24,
+  infoTitle: {
+    fontSize: 16,
     fontWeight: '600',
     color: '#111827',
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  footerSubtitle: {
-    fontSize: 18,
+  infoText: {
+    fontSize: 14,
     color: '#6B7280',
+    textAlign: 'center',
   },
 })
