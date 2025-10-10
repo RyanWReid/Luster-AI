@@ -1,27 +1,32 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Image,
   ScrollView,
   Dimensions,
+  Animated,
+  Easing,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
+import { BlurView } from 'expo-blur'
 import Svg, { Path } from 'react-native-svg'
+import { usePhotos } from '../context/PhotoContext'
+import hapticFeedback from '../utils/haptics'
 
 const { width } = Dimensions.get('window')
 
-// Close icon
-const CloseIcon = () => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+// Back icon
+const BackIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path
-      d="M18 6L6 18M6 6l12 12"
-      stroke="#374151"
-      strokeWidth="2"
+      d="M15 18l-6-6 6-6"
+      stroke="#111827"
+      strokeWidth="2.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
@@ -49,35 +54,15 @@ interface StepIndicatorProps {
 const StepIndicator = ({ currentStep, totalSteps }: StepIndicatorProps) => {
   return (
     <View style={styles.stepContainer}>
-      {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step, index) => (
-        <React.Fragment key={step}>
-          <TouchableOpacity
-            style={[
-              styles.stepCircle,
-              step === currentStep && styles.stepCircleActive,
-              step < currentStep && styles.stepCircleCompleted,
-            ]}
-            disabled={step > currentStep}
-          >
-            <Text
-              style={[
-                styles.stepText,
-                step === currentStep && styles.stepTextActive,
-                step < currentStep && styles.stepTextCompleted,
-              ]}
-            >
-              {step < currentStep ? '✓' : step === currentStep ? `Step ${step}` : step}
-            </Text>
-          </TouchableOpacity>
-          {index < totalSteps - 1 && (
-            <View
-              style={[
-                styles.stepLine,
-                step < currentStep && styles.stepLineCompleted,
-              ]}
-            />
-          )}
-        </React.Fragment>
+      {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
+        <View
+          key={step}
+          style={[
+            styles.stepDot,
+            step === currentStep && styles.stepDotActive,
+            step < currentStep && styles.stepDotCompleted,
+          ]}
+        />
       ))}
     </View>
   )
@@ -90,32 +75,124 @@ interface StyleCardProps {
   image: any
   isSelected: boolean
   onSelect: () => void
-  index: number
 }
 
-const StyleCard = ({ title, image, isSelected, onSelect, index }: StyleCardProps) => (
-  <TouchableOpacity
-    style={styles.styleCard}
-    onPress={onSelect}
-    activeOpacity={0.9}
-  >
-    <View style={[styles.imageContainer, isSelected && styles.imageContainerSelected]}>
-      <Image source={image} style={styles.styleImage} />
-      {isSelected && (
-        <View style={styles.checkmark}>
-          <CheckIcon />
+const StyleCard = ({ title, image, isSelected, onSelect }: StyleCardProps) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current
+
+  const handlePressIn = () => {
+    hapticFeedback.light()
+    Animated.spring(scaleAnim, {
+      toValue: 0.95,
+      friction: 8,
+      tension: 100,
+      useNativeDriver: true,
+    }).start()
+  }
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      friction: 8,
+      tension: 100,
+      useNativeDriver: true,
+    }).start()
+  }
+
+  return (
+    <Animated.View
+      style={[
+        styles.styleCard,
+        {
+          transform: [{ scale: scaleAnim }],
+        },
+      ]}
+    >
+      <TouchableOpacity
+        onPress={onSelect}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        activeOpacity={1}
+      >
+        <View style={[styles.cardWrapper, isSelected && styles.cardWrapperSelected]}>
+          {isSelected && (
+            <LinearGradient
+              colors={['#D4AF37', '#F59E0B', '#D4AF37']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.selectionGradient}
+            />
+          )}
+          <BlurView
+            intensity={40}
+            tint="light"
+            style={styles.imageContainer}
+          >
+            <Image source={image} style={styles.styleImage} />
+            {isSelected && (
+              <View style={styles.checkmarkContainer}>
+                <LinearGradient
+                  colors={['#D4AF37', '#B8860B']}
+                  style={styles.checkmark}
+                >
+                  <CheckIcon />
+                </LinearGradient>
+              </View>
+            )}
+          </BlurView>
         </View>
-      )}
-    </View>
-    <Text style={styles.styleTitle}>{title}</Text>
-  </TouchableOpacity>
-)
+        <Text style={styles.styleTitle}>{title}</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  )
+}
 
 export default function StyleSelectionScreen() {
   const navigation = useNavigation()
+  const { selectedPhotos } = usePhotos()
   const [selectedStyle, setSelectedStyle] = useState<StyleOption | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const currentStep = 2
+
+  // Animation refs
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const scaleAnim = useRef(new Animated.Value(0.95)).current
+  const blobAnim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    // Entrance animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start()
+
+    // Background blob animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(blobAnim, {
+          toValue: 1,
+          duration: 8000,
+          useNativeDriver: false,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(blobAnim, {
+          toValue: 0,
+          duration: 8000,
+          useNativeDriver: false,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ])
+    ).start()
+  }, [])
 
   // Create 3x3 grid - 3 rows of each style
   const styleOptions = [
@@ -131,80 +208,177 @@ export default function StyleSelectionScreen() {
   ]
 
   const handleClose = () => {
+    hapticFeedback.light()
     navigation.goBack()
   }
 
   const handleChooseStyle = () => {
     if (selectedStyle) {
-      // Navigate to confirmation screen with selected style
-      navigation.navigate('Confirmation' as never, { 
+      hapticFeedback.medium()
+      navigation.navigate('Confirmation' as never, {
         style: selectedStyle,
-        photoCount: 10 // This should come from previous screen in real app
+        photoCount: selectedPhotos.length || 1,
       })
     }
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>New Listing</Text>
-        <TouchableOpacity onPress={handleClose} style={styles.closeButton}>
-          <CloseIcon />
-        </TouchableOpacity>
-      </View>
+    <View style={styles.container}>
+      {/* Iridescent gradient background */}
+      <LinearGradient
+        colors={['#FFF5F7', '#F7F0FF', '#F0F8FF', '#FFF8F0']}
+        locations={[0, 0.3, 0.6, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
 
-      {/* Step Indicator */}
-      <StepIndicator currentStep={currentStep} totalSteps={3} />
-
-      <ScrollView 
-        style={styles.content} 
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+      {/* Organic blob animations */}
+      <Animated.View
+        style={[
+          styles.blobContainer1,
+          {
+            transform: [
+              {
+                translateY: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 30],
+                }),
+              },
+              {
+                translateX: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -20],
+                }),
+              },
+            ],
+          },
+        ]}
       >
-        {/* Pick the vibe */}
-        <View style={styles.vibeSection}>
-          <Text style={styles.vibeTitle}>Pick the vibe</Text>
-          <Text style={styles.vibeSubtitle}>Choose a style</Text>
-          
-          {/* Style Cards Grid */}
-          <View style={styles.styleGrid}>
-            {styleOptions.map((option, index) => (
-              <StyleCard
-                key={index}
-                index={index}
-                title={option.title}
-                image={option.image}
-                isSelected={selectedIndex === index}
-                onSelect={() => {
-                  setSelectedStyle(option.title)
-                  setSelectedIndex(index)
-                }}
-              />
-            ))}
-          </View>
-        </View>
-      </ScrollView>
+        <LinearGradient
+          colors={['rgba(255, 182, 193, 0.15)', 'rgba(255, 218, 185, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
 
-      {/* Choose Button */}
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity
-          onPress={handleChooseStyle}
-          disabled={!selectedStyle}
-          activeOpacity={0.8}
-          style={styles.chooseButtonTouchable}
+      <Animated.View
+        style={[
+          styles.blobContainer2,
+          {
+            transform: [
+              {
+                translateY: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -25],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(230, 190, 255, 0.15)', 'rgba(190, 220, 255, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
+
+      <SafeAreaView style={styles.safeArea}>
+        {/* Header */}
+        <Animated.View
+          style={[
+            styles.header,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
         >
-          <LinearGradient
-            colors={!selectedStyle ? ['#D1D5DB', '#D1D5DB'] : ['#fbbf24', '#f59e0b']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.chooseButton}
+          <TouchableOpacity onPress={handleClose} style={styles.backButton}>
+            <BlurView intensity={60} tint="light" style={styles.backButtonBlur}>
+              <BackIcon />
+            </BlurView>
+          </TouchableOpacity>
+
+          <Text style={styles.headerTitle}>New Listing</Text>
+
+          <View style={styles.backButton} />
+        </Animated.View>
+
+        {/* Step Indicator */}
+        <Animated.View
+          style={[
+            styles.stepIndicatorWrapper,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          <StepIndicator currentStep={currentStep} totalSteps={3} />
+        </Animated.View>
+
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <Animated.View
+            style={[
+              styles.vibeSection,
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
           >
-            <Text style={styles.chooseButtonText}>Choose this style</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+            <Text style={styles.vibeTitle}>Pick the vibe</Text>
+            <Text style={styles.vibeSubtitle}>Choose a style</Text>
+
+            {/* Style Cards Grid */}
+            <View style={styles.styleGrid}>
+              {styleOptions.map((option, index) => (
+                <StyleCard
+                  key={index}
+                  title={option.title}
+                  image={option.image}
+                  isSelected={selectedIndex === index}
+                  onSelect={() => {
+                    hapticFeedback.selection()
+                    setSelectedStyle(option.title)
+                    setSelectedIndex(index)
+                  }}
+                />
+              ))}
+            </View>
+          </Animated.View>
+        </ScrollView>
+
+        {/* Choose Button */}
+        <Animated.View
+          style={[
+            styles.bottomContainer,
+            {
+              opacity: fadeAnim,
+            },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={handleChooseStyle}
+            disabled={!selectedStyle}
+            activeOpacity={0.8}
+            style={styles.chooseButtonTouchable}
+          >
+            <LinearGradient
+              colors={!selectedStyle ? ['#D1D5DB', '#D1D5DB'] : ['#D4AF37', '#B8860B']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.chooseButton}
+            >
+              <Text style={styles.chooseButtonText}>Choose this style</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
+      </SafeAreaView>
+    </View>
   )
 }
 
@@ -213,69 +387,78 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  blobContainer1: {
+    position: 'absolute',
+    top: -100,
+    left: -100,
+    width: 400,
+    height: 400,
+  },
+  blobContainer2: {
+    position: 'absolute',
+    bottom: -150,
+    right: -150,
+    width: 450,
+    height: 450,
+  },
+  blob: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
+  },
+  safeArea: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 20,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-    color: '#111827',
-  },
-  closeButton: {
+  backButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  backButtonBlur: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  stepIndicatorWrapper: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
   },
   stepContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 24,
+    justifyContent: 'center',
+    gap: 8,
   },
-  stepCircle: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+  stepDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
   },
-  stepCircleActive: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#FCD34D',
+  stepDotActive: {
+    width: 24,
+    height: 8,
+    backgroundColor: '#D4AF37',
   },
-  stepCircleCompleted: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
-  },
-  stepText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#9CA3AF',
-  },
-  stepTextActive: {
-    color: '#92400E',
-    fontWeight: '600',
-  },
-  stepTextCompleted: {
-    color: '#FFFFFF',
-  },
-  stepLine: {
-    flex: 1,
-    height: 1.5,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 8,
-  },
-  stepLineCompleted: {
+  stepDotCompleted: {
     backgroundColor: '#10B981',
   },
   content: {
@@ -290,9 +473,10 @@ const styles = StyleSheet.create({
   },
   vibeTitle: {
     fontSize: 28,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#111827',
     marginBottom: 4,
+    letterSpacing: -0.5,
   },
   vibeSubtitle: {
     fontSize: 16,
@@ -305,65 +489,92 @@ const styles = StyleSheet.create({
     marginHorizontal: -6,
   },
   styleCard: {
-    width: (width - 48 - 24) / 3, // 3 columns with padding
+    width: (width - 48 - 24) / 3,
     marginHorizontal: 6,
     marginBottom: 20,
     alignItems: 'center',
   },
-  imageContainer: {
+  cardWrapper: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'transparent',
+    position: 'relative',
   },
-  imageContainerSelected: {
-    borderColor: '#FCD34D',
-    borderWidth: 3,
+  cardWrapperSelected: {
+    padding: 3,
+  },
+  selectionGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
+  },
+  imageContainer: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 17,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    position: 'relative',
   },
   styleImage: {
     width: '100%',
     height: '100%',
   },
   styleTitle: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
     color: '#374151',
     marginTop: 8,
     textAlign: 'center',
   },
-  checkmark: {
+  checkmarkContainer: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 8,
+    right: 8,
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#10B981',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  checkmark: {
+    width: '100%',
+    height: '100%',
     justifyContent: 'center',
     alignItems: 'center',
   },
   bottomContainer: {
     paddingHorizontal: 24,
     paddingTop: 16,
-    paddingBottom: 34,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
+    paddingBottom: 16,
   },
   chooseButtonTouchable: {
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   chooseButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 18,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
   chooseButtonText: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
     color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
 })
