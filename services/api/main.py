@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 from database import (Asset, Credit, Job, JobEvent, JobStatus, Shoot, User,
                       get_db)
@@ -65,7 +66,8 @@ Path(UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
 Path(OUTPUTS_DIR).mkdir(parents=True, exist_ok=True)
 
 # Default user ID for local development (matches schema.sql)
-DEFAULT_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
+# Must be UUID object for SQLAlchemy Uuid type compatibility
+DEFAULT_USER_ID = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
 
 # Pydantic models for mobile API
 class Base64ImageRequest(BaseModel):
@@ -75,7 +77,7 @@ class Base64ImageRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint with database and queue status"""
+    """Health check endpoint with database status"""
     health_status = {"status": "healthy", "services": {}}
 
     # Check database
@@ -83,31 +85,11 @@ def health_check():
         from database import SessionLocal
 
         db = SessionLocal()
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db.close()
         health_status["services"]["database"] = "healthy"
     except Exception as e:
         health_status["services"]["database"] = f"unhealthy: {str(e)}"
-        health_status["status"] = "degraded"
-
-    # Check Redis/Queue
-    try:
-        from job_queue import get_queue_info, redis_health_check
-
-        redis_status = redis_health_check()
-        queue_info = get_queue_info()
-
-        if redis_status["status"] == "healthy":
-            health_status["services"]["redis"] = "healthy"
-            health_status["services"]["queues"] = queue_info
-        else:
-            health_status["services"][
-                "redis"
-            ] = f"unhealthy: {redis_status.get('error', 'unknown')}"
-            health_status["status"] = "degraded"
-
-    except Exception as e:
-        health_status["services"]["redis"] = f"unhealthy: {str(e)}"
         health_status["status"] = "degraded"
 
     return health_status
