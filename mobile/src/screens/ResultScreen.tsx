@@ -92,7 +92,7 @@ export default function ResultScreen() {
   const navigation = useNavigation()
   const route = useRoute()
   const { selectedPhotos, enhancedPhotos } = usePhotos()
-  const { addListing } = useListings()
+  const { addListing, updateListing } = useListings()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [containerWidth, setContainerWidth] = useState(width - 48)
   const sliderPosition = useRef(new Animated.Value((width - 48) / 2)).current
@@ -104,6 +104,7 @@ export default function ResultScreen() {
 
   // Get enhanced photos from navigation params or context
   const params = route.params as any
+  const propertyId = params?.propertyId || null
   const enhancedFromNav = params?.enhancedPhotos || enhancedPhotos || []
   const originalFromNav = params?.originalPhotos || selectedPhotos || []
 
@@ -247,18 +248,34 @@ export default function ResultScreen() {
 
       const allOriginalImages = originalFromNav.map((url: string) => ({ uri: url }))
 
-      const newListing = {
-        address: `${allEnhancedImages.length} Photos Enhanced`,
-        price: '$---,---',
-        beds: 0,
-        baths: 0,
-        image: allEnhancedImages[0] || images[0].enhanced,
-        images: allEnhancedImages,
-        originalImages: allOriginalImages,
-        isEnhanced: true,
+      if (propertyId) {
+        // Update existing property to 'completed' status
+        updateListing(propertyId, {
+          address: `${allEnhancedImages.length} Photos Enhanced`,
+          image: allEnhancedImages[0] || images[0].enhanced,
+          images: allEnhancedImages,
+          originalImages: allOriginalImages,
+          isEnhanced: true,
+          status: 'completed',
+        })
+        console.log('Updated property to completed status:', propertyId)
+      } else {
+        // Fallback: Create new listing if no propertyId (shouldn't happen normally)
+        const newListing = {
+          address: `${allEnhancedImages.length} Photos Enhanced`,
+          price: '$---,---',
+          beds: 0,
+          baths: 0,
+          image: allEnhancedImages[0] || images[0].enhanced,
+          images: allEnhancedImages,
+          originalImages: allOriginalImages,
+          isEnhanced: true,
+          status: 'completed' as const,
+        }
+        addListing(newListing)
+        console.log('Created new listing (fallback)')
       }
 
-      addListing(newListing)
       hapticFeedback.notification('success')
     }
 
@@ -394,14 +411,14 @@ export default function ResultScreen() {
                   sliderPosition.setValue(width / 2)
                 }}
               >
-                {/* Original Image */}
+                {/* Enhanced Image (background - right side) */}
                 <Image
-                  source={images[currentIndex].original}
+                  source={images[currentIndex].enhanced}
                   style={styles.mainImage}
                   resizeMode="cover"
                 />
 
-                {/* Enhanced Image with Slider */}
+                {/* Original Image with Slider (overlay - left side) */}
                 <Animated.View
                   style={[
                     styles.enhancedImageContainer,
@@ -411,7 +428,7 @@ export default function ResultScreen() {
                   ]}
                 >
                   <Image
-                    source={images[currentIndex].enhanced}
+                    source={images[currentIndex].original}
                     style={styles.mainImage}
                     resizeMode="cover"
                   />
@@ -681,6 +698,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     borderRadius: 16,
     padding: 2,
+    opacity: 0.4,
   },
   thumbnailGradient: {
     flex: 1,

@@ -12,6 +12,10 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
+import type { StackNavigationProp } from '@react-navigation/stack'
+import type { RootStackParamList } from '../navigation/RootNavigator'
+
+type StyleSelectionNavigationProp = StackNavigationProp<RootStackParamList>
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import Svg, { Path } from 'react-native-svg'
@@ -148,7 +152,7 @@ const StyleCard = ({ title, image, isSelected, onSelect }: StyleCardProps) => {
 }
 
 export default function StyleSelectionScreen() {
-  const navigation = useNavigation()
+  const navigation = useNavigation<StyleSelectionNavigationProp>()
   const { selectedPhotos } = usePhotos()
   const [selectedStyle, setSelectedStyle] = useState<StyleOption | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
@@ -194,17 +198,11 @@ export default function StyleSelectionScreen() {
     ).start()
   }, [])
 
-  // Create 3x3 grid - 3 rows of each style
+  // Three distinct style options with unique thumbnails
   const styleOptions = [
-    { title: 'Flambient' as StyleOption, image: require('../../assets/photo.png') },
-    { title: 'Minimalist' as StyleOption, image: require('../../assets/photo.png') },
-    { title: 'Luster' as StyleOption, image: require('../../assets/photo.png') },
-    { title: 'Flambient' as StyleOption, image: require('../../assets/photo.png') },
-    { title: 'Minimalist' as StyleOption, image: require('../../assets/photo.png') },
-    { title: 'Luster' as StyleOption, image: require('../../assets/photo.png') },
-    { title: 'Flambient' as StyleOption, image: require('../../assets/photo.png') },
-    { title: 'Minimalist' as StyleOption, image: require('../../assets/photo.png') },
-    { title: 'Luster' as StyleOption, image: require('../../assets/photo.png') },
+    { title: 'Flambient' as StyleOption, image: require('../../assets/thumbnails/natural-thumbnail.png') },
+    { title: 'Minimalist' as StyleOption, image: require('../../assets/thumbnails/warm-thumbnail.png') },
+    { title: 'Luster' as StyleOption, image: require('../../assets/thumbnails/clean-thumbnail.png') },
   ]
 
   const handleClose = () => {
@@ -215,7 +213,7 @@ export default function StyleSelectionScreen() {
   const handleChooseStyle = () => {
     if (selectedStyle) {
       hapticFeedback.medium()
-      navigation.navigate('Confirmation' as never, {
+      navigation.navigate('Confirmation', {
         style: selectedStyle,
         photoCount: selectedPhotos.length || 1,
       })

@@ -661,7 +661,7 @@ const styles = StyleSheet.create({
   // Property card styles
   propertyCard: {
     position: 'absolute',
-    bottom: 0,
+    bottom: 10,
     left: 0,
     right: 0,
     zIndex: 50,

@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { usePhotos } from '../context/PhotoContext'
+import { useListings } from '../context/ListingsContext'
 import hapticFeedback from '../utils/haptics'
 
 // Back icon
@@ -106,6 +107,7 @@ export default function ConfirmationScreen() {
   const navigation = useNavigation()
   const route = useRoute()
   const { selectedPhotos } = usePhotos()
+  const { addListing } = useListings()
   const currentStep = 3
 
   // Get data from previous screens
@@ -179,11 +181,27 @@ export default function ConfirmationScreen() {
 
     const apiStyle = styleMapping[selectedStyle] || 'luster'
 
+    // Create property card BEFORE entering ProcessingScreen
+    const propertyId = addListing({
+      address: 'New Project',
+      price: '$---,---',
+      beds: 0,
+      baths: 0,
+      image: selectedPhotos[0] ? { uri: selectedPhotos[0] } : require('../../assets/photo.png'),
+      images: [],
+      originalImages: selectedPhotos.map((uri: string) => ({ uri })),
+      isEnhanced: false,
+      status: 'processing',
+    })
+
+    console.log('ConfirmationScreen: Created property with ID:', propertyId)
+
     navigation.navigate('Processing' as never, {
+      propertyId: propertyId,
       style: apiStyle,
       photos: selectedPhotos,
       photoCount: photoCount,
-    })
+    } as never)
   }
 
   return (

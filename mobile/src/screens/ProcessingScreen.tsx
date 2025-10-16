@@ -75,11 +75,12 @@ export default function ProcessingScreen() {
   const navigation = useNavigation()
   const route = useRoute()
   const { selectedPhotos, setEnhancedPhotos } = usePhotos()
-  const { addListing } = useListings()
+  const { addListing, updateListing, listings, isProcessing, markAsProcessing } = useListings()
   const firstImage = selectedPhotos[0] || null
 
   // Get parameters from previous screen
   const params = route.params as any
+  const existingPropertyId = params?.propertyId || null // Get propertyId from navigation params
   const style = params?.style || 'luster'
   const photos = params?.photos || selectedPhotos
   const photoCount = params?.photoCount || photos.length
@@ -89,6 +90,10 @@ export default function ProcessingScreen() {
   const [currentStatus, setCurrentStatus] = useState('Analyzing your photos...')
   const [enhancedUrls, setEnhancedUrls] = useState<string[]>([])
   const [canDismiss, setCanDismiss] = useState(false)
+  const [propertyId, setPropertyId] = useState<string | null>(existingPropertyId)
+
+  // Use ref to track processing state (doesn't trigger re-renders)
+  const hasStartedProcessing = useRef(false)
 
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -181,27 +186,93 @@ export default function ProcessingScreen() {
   }, [])
 
   useEffect(() => {
+    // Prevent re-running if already processing
+    if (hasStartedProcessing.current) {
+      console.log('ProcessingScreen: Local ref already set, skipping...')
+      return
+    }
+
+    let isMounted = true
+
     async function processImages() {
+      if (!isMounted) return
       try {
+        // Only create property if we don't have an existing one
+        let currentPropertyId = existingPropertyId
+        if (!currentPropertyId && photos.length > 0 && photos[0]) {
+          // Fallback: create property if one wasn't created in ConfirmationScreen
+          currentPropertyId = addListing({
+            address: 'New Project',
+            price: '$---,---',
+            beds: 0,
+            baths: 0,
+            image: { uri: photos[0] },
+            images: [],
+            originalImages: photos.map((uri: string) => ({ uri })),
+            isEnhanced: false,
+            status: 'processing',
+          })
+          setPropertyId(currentPropertyId)
+          console.log('ProcessingScreen: Created fallback property card:', currentPropertyId)
+        } else {
+          console.log('ProcessingScreen: Using existing property ID:', currentPropertyId)
+        }
+
+        // Check if this property is already done processing
+        if (currentPropertyId) {
+          const existingListing = listings.find((l: any) => l.id === currentPropertyId)
+          if (existingListing?.status === 'ready' || existingListing?.status === 'completed') {
+            console.log('ProcessingScreen: Property already processed, redirecting to results...')
+            // Navigate directly to results
+            navigation.navigate('Result' as never, {
+              propertyId: currentPropertyId,
+              enhancedPhotos: existingListing.images?.map((img: any) => img.uri) || [],
+              originalPhotos: existingListing.originalImages?.map((img: any) => img.uri) || [],
+            } as never)
+            return
+          }
+
+          // Check global processing tracker (survives re-mounts)
+          if (isProcessing(currentPropertyId)) {
+            console.log('ProcessingScreen: GLOBAL CHECK - Property already being processed, skipping:', currentPropertyId)
+            hasStartedProcessing.current = true
+            return
+          }
+
+          // Mark as processing globally
+          markAsProcessing(currentPropertyId)
+          hasStartedProcessing.current = true
+        } else {
+          hasStartedProcessing.current = true
+        }
+
         setCurrentStatus('Preparing your photos...')
-        await new Promise((resolve) => setTimeout(resolve, 500))
+        await new Promise((resolve) => setTimeout(resolve, 1000))
 
         const results: string[] = []
 
+        // Allow dismissing immediately
+        setCanDismiss(true)
+
+        // Synthetic processing: 30 seconds divided by number of photos
+        const timePerPhoto = 30000 / photos.length // 30 seconds total
+
         for (let i = 0; i < photos.length; i++) {
           setCurrentStatus(`Enhancing photo ${i + 1} of ${photos.length}...`)
+          setProcessedCount(i)
+
+          // Simulate queued state
+          setCurrentStatus(`Photo ${i + 1}: Queued...`)
+          await new Promise((resolve) => setTimeout(resolve, timePerPhoto * 0.2))
+
+          // Simulate processing state
+          setCurrentStatus(`Photo ${i + 1}: Enhancing with AI...`)
+          await new Promise((resolve) => setTimeout(resolve, timePerPhoto * 0.8))
+
+          // Use original photo as "enhanced" output (no API call)
+          results.push(photos[i])
           setProcessedCount(i + 1)
-
-          // Allow dismissing after first photo starts
-          if (i === 0) {
-            setCanDismiss(true)
-          }
-
-          const result = await enhancementService.enhanceImage({
-            imageUrl: photos[i],
-            style: style as any,
-          })
-          results.push(result)
+          console.log(`Photo ${i + 1} "enhanced" (using original)`)
         }
 
         // Success haptic
@@ -212,23 +283,18 @@ export default function ProcessingScreen() {
           setEnhancedPhotos(results)
         }
 
-        if (results.length > 0 && results[0]) {
-          addListing({
-            address: 'New Listing',
-            price: '$---,---',
-            beds: 0,
-            baths: 0,
-            image: { uri: results[0] },
-            isEnhanced: true,
+        // Update property status to 'ready'
+        if (currentPropertyId) {
+          updateListing(currentPropertyId, {
+            status: 'ready',
+            images: results.map((uri: string) => ({ uri })),
           })
+          console.log('Updated property to ready status:', currentPropertyId)
         }
 
-        // Navigate to results
-        navigation.navigate('Result' as never, {
-          enhancedPhotos: results,
-          originalPhotos: photos,
-          style: style,
-        })
+        // Don't auto-navigate - just go back to dashboard
+        // User can click the property card to see results
+        navigation.navigate('Main' as never)
       } catch (error) {
         console.error('Enhancement failed:', error)
         hapticFeedback.notification('error')
@@ -249,8 +315,11 @@ export default function ProcessingScreen() {
       processImages()
     }, 500)
 
-    return () => clearTimeout(timer)
-  }, [])
+    return () => {
+      isMounted = false
+      clearTimeout(timer)
+    }
+  }, []) // Empty dependency array - only run once on mount
 
   const handleBack = () => {
     if (canDismiss) {
