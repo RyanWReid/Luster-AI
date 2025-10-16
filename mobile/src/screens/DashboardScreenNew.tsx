@@ -10,7 +10,9 @@ import {
   Dimensions,
   ActivityIndicator,
   Animated,
+  Easing,
   Platform,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -19,11 +21,13 @@ import Svg, { Path, Circle, Rect } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { useListings } from '../context/ListingsContext'
 import { usePhotos } from '../context/PhotoContext'
+import hapticFeedback from '../utils/haptics'
 
 const { width, height } = Dimensions.get('window')
 
 // Default property image
 const defaultPropertyImage = require('../../assets/photo.png')
+const lusterLogoWhite = require('../../assets/luster-white-logo.png')
 
 // Modern coin icon
 const CoinIcon = ({ size = 20, color = '#D4AF37' }: { size?: number; color?: string }) => (
@@ -104,13 +108,52 @@ const mockProperties = [
     status: 'Enhanced',
     date: 'Yesterday',
   },
+  {
+    id: '4',
+    address: '321 Maple Drive',
+    price: '$680,000',
+    beds: 4,
+    baths: 3.5,
+    squareFeet: '2,950',
+    image: defaultPropertyImage,
+    status: 'Enhanced',
+    date: '3 days ago',
+  },
 ]
 
 export default function DashboardScreenNew() {
   const navigation = useNavigation()
-  const { listings } = useListings()
+  const { listings, isLoading: isLoadingListings, clearListings } = useListings()
   const { creditBalance, isLoadingCredits } = usePhotos()
   const showMockData = false // Toggle this to true to show mock data cards
+
+  // Use real listings if available, otherwise use mock data
+  const displayData = listings.length > 0 ? listings : (showMockData ? mockProperties : [])
+
+  // Calculate real counts
+  const propertyCount = listings.length
+  const totalPhotoCount = listings.reduce((total, listing) => {
+    const imageCount = listing.images?.length || 0
+    return total + imageCount
+  }, 0)
+
+  const handleClearAll = () => {
+    Alert.alert(
+      'Clear All Projects?',
+      'This will permanently delete all projects and their photos. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete All',
+          style: 'destructive',
+          onPress: () => {
+            clearListings()
+            hapticFeedback.notification('success')
+          },
+        },
+      ]
+    )
+  }
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -165,12 +208,93 @@ export default function DashboardScreenNew() {
   }
 
   const handlePropertyPress = (item: any) => {
-    navigation.navigate('Project' as never, { property: item } as never)
+    // Navigate based on property status
+    if (item.status === 'processing') {
+      // Property is still processing - go to ProcessingScreen
+      navigation.navigate('Processing' as never, {
+        propertyId: item.id,
+        photos: item.originalImages?.map((img: any) => img.uri) || [],
+        photoCount: item.originalImages?.length || 0,
+      } as never)
+    } else if (item.status === 'ready') {
+      // Processing done, ready to save - go to ResultScreen
+      navigation.navigate('Result' as never, {
+        propertyId: item.id,
+        enhancedPhotos: item.images?.map((img: any) => img.uri) || [],
+        originalPhotos: item.originalImages?.map((img: any) => img.uri) || [],
+      } as never)
+    } else {
+      // Completed - go to Project gallery
+      navigation.navigate('Project' as never, { property: item } as never)
+    }
   }
 
 
   const AnimatedCard = ({ item, index }: { item: any; index: number }) => {
     const cardScale = useRef(new Animated.Value(1)).current
+    const spinAnim = useRef(new Animated.Value(0)).current
+    const pulseAnim = useRef(new Animated.Value(1)).current
+    const glowAnim = useRef(new Animated.Value(0)).current
+
+    useEffect(() => {
+      if (item.status === 'processing') {
+        // Spinning loader animation
+        Animated.loop(
+          Animated.timing(spinAnim, {
+            toValue: 1,
+            duration: 2000,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          })
+        ).start()
+      } else if (item.status === 'ready') {
+        // Pulsing checkmark animation
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 1.15,
+              duration: 1000,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 1000,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        ).start()
+
+        // Glowing border animation (using opacity for native driver support)
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(glowAnim, {
+              toValue: 1,
+              duration: 1500,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowAnim, {
+              toValue: 0,
+              duration: 1500,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        ).start()
+      }
+    }, [item.status])
+
+    const spin = spinAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '360deg'],
+    })
+
+    const glowOpacity = glowAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.4, 1],
+    })
 
     const handlePressIn = () => {
       Animated.spring(cardScale, {
@@ -190,16 +314,31 @@ export default function DashboardScreenNew() {
       }).start()
     }
 
+    const isProcessing = item.status === 'processing'
+    const isReady = item.status === 'ready'
+
     return (
       <Animated.View
         style={[
           styles.gridCard,
+          isReady && styles.gridCardReady,
           {
             transform: [{ scale: cardScale }],
             opacity: fadeAnim,
           },
         ]}
       >
+        {/* Glowing border effect for ready state */}
+        {isReady && (
+          <Animated.View
+            style={[
+              styles.glowBorder,
+              {
+                opacity: glowOpacity,
+              },
+            ]}
+          />
+        )}
         <TouchableOpacity
           activeOpacity={1}
           onPressIn={handlePressIn}
@@ -207,30 +346,66 @@ export default function DashboardScreenNew() {
           onPress={() => handlePropertyPress(item)}
         >
           <View style={styles.cardImageContainer}>
-            <Image source={item.image} style={styles.gridImage} />
-            {/* Iridescent gradient overlay */}
-            <LinearGradient
-              colors={['transparent', 'transparent', 'rgba(247, 240, 255, 0.5)', 'rgba(255, 245, 247, 0.8)']}
-              locations={[0, 0.3, 0.7, 1]}
-              style={styles.iridescenOverlay}
+            <Image
+              source={item.image}
+              style={styles.gridImage}
             />
-            <LinearGradient
-              colors={['transparent', 'rgba(240, 248, 255, 0.3)', 'rgba(255, 248, 240, 0.6)']}
-              locations={[0, 0.5, 1]}
-              start={{ x: 1, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={styles.iridescenOverlay}
-            />
+
+            {/* Processing State Overlay */}
+            {isProcessing && (
+              <BlurView intensity={80} tint="light" style={styles.processingOverlay}>
+                <View style={styles.spinnerContainer}>
+                  <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                    <Svg width={64} height={64} viewBox="0 0 64 64">
+                      <Circle
+                        cx="32"
+                        cy="32"
+                        r="26"
+                        stroke="#6B7280"
+                        strokeWidth="4.5"
+                        fill="none"
+                        strokeDasharray="130, 32"
+                        strokeLinecap="round"
+                      />
+                    </Svg>
+                  </Animated.View>
+                </View>
+              </BlurView>
+            )}
+
+            {/* Ready State: Full card blur with centered checkmark */}
+            {isReady && (
+              <BlurView intensity={80} tint="light" style={styles.readyOverlay}>
+                {/* Circle background for checkmark */}
+                <Animated.View
+                  style={[
+                    styles.checkmarkCircle,
+                    {
+                      transform: [{ scale: pulseAnim }],
+                    },
+                  ]}
+                >
+                  <Svg width={52} height={52} viewBox="0 0 24 24" fill="none">
+                    <Path
+                      d="M20 6L9 17l-5-5"
+                      stroke="#4A90E2"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                </Animated.View>
+              </BlurView>
+            )}
           </View>
-          <BlurView intensity={80} tint="light" style={styles.gridOverlay}>
-            <Text style={styles.gridPrice}>{item.price}</Text>
-            <Text style={styles.gridAddress} numberOfLines={1}>
-              {item.address}
-            </Text>
-            <Text style={styles.gridSpecs}>
-              {item.beds} bed • {item.baths} bath
-            </Text>
-          </BlurView>
+          {/* Bottom text overlay (only show when NOT ready and NOT processing) */}
+          {!isReady && !isProcessing && (
+            <BlurView intensity={60} tint="light" style={styles.gridOverlay}>
+              <Text style={styles.gridAddress} numberOfLines={2}>
+                {item.address}
+              </Text>
+            </BlurView>
+          )}
         </TouchableOpacity>
       </Animated.View>
     )
@@ -341,63 +516,78 @@ export default function DashboardScreenNew() {
             ]}
           >
             <BlurView intensity={60} tint="light" style={styles.statCard}>
-              <Text style={styles.statNumber}>0</Text>
+              <Text style={styles.statNumber}>{propertyCount}</Text>
               <Text style={styles.statLabel}>Properties</Text>
-              <View style={styles.statTrend}>
-                <TrendingIcon size={14} color="#9E9E9E" />
-                <Text style={styles.statChange}>--</Text>
-              </View>
             </BlurView>
 
             <BlurView intensity={60} tint="light" style={styles.statCard}>
-              <Text style={styles.statNumber}>0</Text>
-              <Text style={styles.statLabel}>Enhanced</Text>
-              <View style={styles.statTrend}>
-                <StarIcon size={12} />
-                <Text style={styles.statChange}>0%</Text>
-              </View>
+              <Text style={styles.statNumber}>{totalPhotoCount}</Text>
+              <Text style={styles.statLabel}>Photos</Text>
             </BlurView>
 
             <BlurView intensity={60} tint="light" style={styles.statCard}>
-              <Text style={styles.statNumber}>$0</Text>
-              <Text style={styles.statLabel}>Total Value</Text>
-              <View style={styles.statTrend}>
-                <TrendingIcon size={14} color="#9E9E9E" />
-                <Text style={styles.statChange}>--</Text>
-              </View>
+              <Text style={styles.statNumber}>{creditBalance || 0}</Text>
+              <Text style={styles.statLabel}>Credits</Text>
             </BlurView>
           </Animated.View>
 
 
-          {/* Recent Properties - Only show if showMockData is true */}
-          {showMockData && (
-            <Animated.View
-              style={[
-                styles.propertiesSection,
-                {
-                  opacity: fadeAnim,
-                },
-              ]}
-            >
-              <View style={styles.sectionHeader}>
+          {/* Recent Properties - Always show */}
+          <Animated.View
+            style={[
+              styles.propertiesSection,
+              {
+                opacity: fadeAnim,
+              },
+            ]}
+          >
+            <View style={styles.sectionHeader}>
+              <TouchableOpacity
+                activeOpacity={1}
+                onLongPress={handleClearAll}
+                delayLongPress={1000}
+              >
                 <Text style={styles.sectionTitle}>Recent Properties</Text>
-                <TouchableOpacity activeOpacity={0.7}>
+              </TouchableOpacity>
+              {displayData.length > 0 && (
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('AllProperties' as never)}
+                >
                   <Text style={styles.seeAll}>See All</Text>
                 </TouchableOpacity>
-              </View>
+              )}
+            </View>
 
+            {displayData.length > 0 ? (
               <FlatList
-                  data={mockProperties}
-                  renderItem={({ item, index }) => <AnimatedCard item={item} index={index} />}
-                  keyExtractor={(item) => item.id}
-                  horizontal={false}
-                  numColumns={2}
-                  scrollEnabled={false}
-                  columnWrapperStyle={styles.propertyRow}
-                  contentContainerStyle={styles.propertyGrid}
+                data={displayData.slice(0, 4)}
+                renderItem={({ item, index }) => <AnimatedCard item={item} index={index} />}
+                keyExtractor={(item) => item.id}
+                horizontal={false}
+                numColumns={2}
+                scrollEnabled={false}
+                columnWrapperStyle={styles.propertyRow}
+                contentContainerStyle={styles.propertyGrid}
               />
-            </Animated.View>
-          )}
+            ) : (
+              <BlurView intensity={40} tint="light" style={styles.emptyStateCard}>
+                <View style={styles.emptyStateLogoContainer}>
+                  <Image
+                    source={lusterLogoWhite}
+                    style={styles.emptyStateLogo}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={styles.emptyStateText}>
+                  Get started by pressing{' '}
+                  <View style={styles.emptyStateLogoInlineContainer}>
+                    <Image source={lusterLogoWhite} style={styles.emptyStateLogoInline} resizeMode="contain" />
+                  </View>
+                </Text>
+              </BlurView>
+            )}
+          </Animated.View>
 
           <View style={styles.bottomSpacer} />
         </ScrollView>
@@ -596,8 +786,75 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 12,
-    paddingTop: 20,
+    height: 72,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    justifyContent: 'flex-end',
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  gridOverlayContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  // Processing State
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  spinnerContainer: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  // Ready State
+  gridCardReady: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#A0C4FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  glowBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: 'rgba(160, 196, 255, 0.6)',
+    pointerEvents: 'none',
+  },
+  readyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(230, 240, 255, 0.25)',
+  },
+  checkmarkCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#A0C4FF',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(160, 196, 255, 0.4)',
   },
   gridPrice: {
     fontSize: 18,
@@ -606,15 +863,77 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   gridAddress: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#333',
-    marginTop: 2,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    lineHeight: 20,
+    letterSpacing: 0.1,
   },
-  gridSpecs: {
-    fontSize: 11,
-    color: '#666',
-    marginTop: 2,
+  // Empty State
+  emptyStateCard: {
+    padding: 48,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  emptyStateLogoContainer: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.4,
+  },
+  emptyStateLogo: {
+    width: 40,
+    height: 40,
+    opacity: 1,
+  },
+  emptyStateLogoInlineContainer: {
+    width: 20,
+    height: 20,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.5,
+    marginHorizontal: 4,
+  },
+  emptyStateLogoInline: {
+    width: 16,
+    height: 16,
+    opacity: 1,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 16,
+    fontWeight: '500',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // Action Icons Row (unused but kept for future)
+  actionIconsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  actionIcon: {
+    width: 38,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   bottomSpacer: {
     height: 100,

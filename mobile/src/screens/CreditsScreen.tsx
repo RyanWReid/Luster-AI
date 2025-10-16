@@ -9,6 +9,8 @@ import {
   Animated,
   Platform,
   StatusBar,
+  ScrollView,
+  FlatList,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -65,10 +67,46 @@ const SparklesIcon = ({ color = '#D4AF37' }) => (
   </Svg>
 )
 
-const RadioButton = ({ selected }: { selected: boolean }) => (
-  <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
-    {selected && <View style={styles.radioInner} />}
-  </View>
+const CoinStackIcon = ({ color = '#D4AF37' }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="6" r="5" stroke={color} strokeWidth="2" />
+    <Path
+      d="M7 9v4c0 2.76 2.24 5 5 5s5-2.24 5-5V9"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+    <Path
+      d="M7 13v4c0 2.76 2.24 5 5 5s5-2.24 5-5v-4"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+    />
+  </Svg>
+)
+
+const InfinityIcon = ({ color = '#D4AF37' }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M18.178 8.667c-1.473 0-2.667 1.194-2.667 2.667s1.194 2.667 2.667 2.667c1.473 0 2.667-1.194 2.667-2.667s-1.194-2.667-2.667-2.667zm0 0c-1.473 0-2.667 1.194-2.667 2.667s1.194 2.667 2.667 2.667m-12.356 0c1.473 0 2.667-1.194 2.667-2.667S7.295 8.667 5.822 8.667c-1.473 0-2.667 1.194-2.667 2.667s1.194 2.667 2.667 2.667zm0 0c1.473 0 2.667-1.194 2.667-2.667S7.295 8.667 5.822 8.667m6.178 2.667c0-1.105.895-2 2-2s2 .895 2 2-.895 2-2 2-2-.895-2-2z"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+const ChevronIcon = ({ rotation = 0, color = '#6B7280' }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none" style={{ transform: [{ rotate: `${rotation}deg` }] }}>
+    <Path
+      d="M6 9l6 6 6-6"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
 )
 
 interface PlanOption {
@@ -77,49 +115,72 @@ interface PlanOption {
   price: string
   badge?: string
   period: string
-  yearlyPrice?: number
-  monthlyEquivalent?: string
   photos: number
+  perPhotoPrice: string
+}
+
+interface CreditBundle {
+  id: string
+  name: string
+  photos: number
+  price: number
+  pricePerPhoto: number
+  discount?: string
+  badge?: string
 }
 
 const plans: PlanOption[] = [
   {
-    id: 'plus',
-    name: 'Plus',
-    price: '$19.99',
-    period: 'month',
-    monthlyEquivalent: '$19.99/mo',
-    photos: 30,
-  },
-  {
     id: 'pro',
     name: 'Pro',
-    price: '$383.90',
-    period: 'year',
-    badge: 'BEST VALUE',
-    yearlyPrice: 383.90,
-    monthlyEquivalent: '$31.99/mo',
-    photos: 80,
+    price: '$40',
+    period: 'month',
+    badge: 'MOST POPULAR',
+    photos: 45,
+    perPhotoPrice: '$0.89',
+  },
+]
+
+const creditBundles: CreditBundle[] = [
+  {
+    id: 'small',
+    name: 'Small',
+    photos: 5,
+    price: 6.25,
+    pricePerPhoto: 1.25,
   },
   {
-    id: 'max',
-    name: 'Max',
-    price: '$84.99',
-    period: 'month',
-    monthlyEquivalent: '$84.99/mo',
-    photos: 200,
+    id: 'medium',
+    name: 'Medium',
+    photos: 15,
+    price: 15,
+    pricePerPhoto: 1.00,
+    badge: 'BEST VALUE',
+  },
+  {
+    id: 'large',
+    name: 'Large',
+    photos: 30,
+    price: 25.50,
+    pricePerPhoto: 0.85,
   },
 ]
 
 export default function CreditsScreen() {
   const navigation = useNavigation()
   const [selectedPlan, setSelectedPlan] = useState<string>('pro')
+  const [showBundles, setShowBundles] = useState<boolean>(false)
+  const [selectedBundle, setSelectedBundle] = useState<string>('')
+  const [currentPage, setCurrentPage] = useState<number>(0)
+  const flatListRef = useRef<FlatList>(null)
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(30)).current
   const backgroundAnim = useRef(new Animated.Value(0)).current
   const blobAnim = useRef(new Animated.Value(0)).current
+  const bundleExpandAnim = useRef(new Animated.Value(0)).current
+  const chevronRotation = useRef(new Animated.Value(0)).current
 
   // Particle animations
   const particle1Y = useRef(new Animated.Value(screenHeight)).current
@@ -214,17 +275,53 @@ export default function CreditsScreen() {
     createParticleAnimation(particle3Y, particle3X, 8000)
   }, [])
 
+  const toggleBundles = () => {
+    const toValue = showBundles ? 0 : 1
+    setShowBundles(!showBundles)
+
+    Animated.parallel([
+      Animated.spring(bundleExpandAnim, {
+        toValue,
+        friction: 10,
+        tension: 50,
+        useNativeDriver: false,
+      }),
+      Animated.timing(chevronRotation, {
+        toValue,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start()
+  }
+
+  const handleBundlePurchase = (bundle: CreditBundle) => {
+    Alert.alert(
+      'Purchase Credits',
+      `${bundle.photos} photos for $${bundle.price}${bundle.discount ? ` (Save ${bundle.discount})` : ''}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Buy Now',
+          onPress: () => {
+            Alert.alert('Success!', `${bundle.photos} credits added to your account!`)
+            navigation.goBack()
+          },
+        },
+      ]
+    )
+  }
+
   const handleStartTrial = () => {
     const selected = plans.find(p => p.id === selectedPlan)
     Alert.alert(
       'Start Your Free Trial',
-      `7 days free, then ${selected?.monthlyEquivalent}`,
+      `7 days free, then ${selected?.price}/${selected?.period}`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Start Trial',
           onPress: () => {
-            Alert.alert('Welcome!', 'Your 7-day free trial has started.')
+            Alert.alert('Welcome to Pro!', 'Your 7-day free trial has started. Create amazing listings!')
             navigation.goBack()
           },
         },
@@ -384,136 +481,205 @@ export default function CreditsScreen() {
 
       {/* Content */}
       <SafeAreaView style={styles.safeArea}>
-        <Animated.View
-          style={[
-            styles.content,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => navigation.goBack()}
-              style={styles.closeButton}
-              activeOpacity={0.7}
-            >
-              <BlurView intensity={20} tint="light" style={styles.closeButtonBlur}>
-                <CloseIcon />
-              </BlurView>
-            </TouchableOpacity>
-          </View>
-
-          {/* Title with gold accent */}
-          <Text style={styles.title}>Unlock Premium</Text>
-          <Text style={styles.subtitle}>Transform your property listings with AI</Text>
-
-          {/* Features with gold icons */}
-          <View style={styles.featuresContainer}>
-            <View style={styles.featureRow}>
-              <View style={styles.featureIcon}>
-                <CameraIcon />
-              </View>
-              <Text style={styles.featureText}>Unlimited photo enhancements</Text>
-            </View>
-
-            <View style={styles.featureRow}>
-              <View style={styles.featureIcon}>
-                <StarIcon />
-              </View>
-              <Text style={styles.featureText}>Premium AI processing</Text>
-            </View>
-
-            <View style={styles.featureRow}>
-              <View style={styles.featureIcon}>
-                <SparklesIcon />
-              </View>
-              <Text style={styles.featureText}>All enhancement styles</Text>
-            </View>
-          </View>
-
-          {/* Spacer */}
-          <View style={{ flex: 1 }} />
-
-          {/* Plan Options with glassmorphism */}
-          <View style={styles.plansContainer}>
-            {plans.map((plan) => (
-              <TouchableOpacity
-                key={plan.id}
-                onPress={() => setSelectedPlan(plan.id)}
-                activeOpacity={0.7}
-              >
-                <BlurView
-                  intensity={selectedPlan === plan.id ? 60 : 40}
-                  tint="light"
-                  style={[
-                    styles.planOption,
-                    selectedPlan === plan.id && styles.planOptionSelected,
-                  ]}
-                >
-                  {plan.badge && (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{plan.badge}</Text>
-                    </View>
-                  )}
-
-                  <View style={styles.planContent}>
-                    <RadioButton selected={selectedPlan === plan.id} />
-
-                    <View style={styles.planDetails}>
-                      <Text style={styles.planName}>{plan.name}</Text>
-                      <Text style={styles.planPhotos}>{plan.photos} photos/month</Text>
-                      {plan.yearlyPrice && (
-                        <Text style={styles.planSubtext}>
-                          Billed annually
-                        </Text>
-                      )}
-                    </View>
-
-                    <View style={styles.priceContainer}>
-                      <Text style={styles.planPrice}>{plan.price}</Text>
-                      <Text style={styles.planPeriod}>/{plan.period}</Text>
-                    </View>
-                  </View>
-                </BlurView>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Trial Info */}
-          <Text style={styles.trialInfo}>
-            Try 7 days for free • Cancel anytime
-          </Text>
-
-          {/* CTA Button with exact welcome screen gradient */}
+        {/* Header */}
+        <View style={styles.header}>
           <TouchableOpacity
-            style={styles.ctaButton}
-            onPress={handleStartTrial}
-            activeOpacity={0.8}
+            onPress={() => navigation.goBack()}
+            style={styles.closeButton}
+            activeOpacity={0.7}
           >
-            <LinearGradient
-              colors={['#D4AF37', '#F4E4C1']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.ctaGradient}
-            >
-              <Text style={styles.ctaText}>Start Free Trial</Text>
-            </LinearGradient>
+            <BlurView intensity={20} tint="light" style={styles.closeButtonBlur}>
+              <CloseIcon />
+            </BlurView>
           </TouchableOpacity>
+        </View>
 
-          {/* Footer Links */}
-          <View style={styles.footer}>
-            <TouchableOpacity activeOpacity={0.7}>
-              <Text style={styles.footerLink}>Restore Purchases</Text>
-            </TouchableOpacity>
-            <Text style={styles.footerDot}>•</Text>
-            <TouchableOpacity activeOpacity={0.7}>
-              <Text style={styles.footerLink}>Terms & Privacy</Text>
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
+        <FlatList
+          ref={flatListRef}
+          data={[0, 1]}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(event) => {
+            const page = Math.round(event.nativeEvent.contentOffset.x / screenWidth)
+            setCurrentPage(page)
+          }}
+          keyExtractor={(item) => item.toString()}
+          renderItem={({ item }) => (
+            <Animated.View
+              style={[
+                styles.pageContainer,
+                {
+                  opacity: fadeAnim,
+                  transform: [{ translateY: slideAnim }],
+                },
+              ]}
+            >
+              <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {item === 0 ? (
+                  // Page 1: Subscription & Trial
+                  <>
+                    {/* Title */}
+                    <Text style={styles.title}>Unlock Premium</Text>
+
+                    {/* Checkmark Features List */}
+                    <View style={styles.checkmarkFeatures}>
+                      <View style={styles.checkmarkRow}>
+                        <View style={styles.checkmarkCircle}>
+                          <Text style={styles.checkmark}>✓</Text>
+                        </View>
+                        <Text style={styles.checkmarkText}>45 photos per month</Text>
+                      </View>
+                      <View style={styles.checkmarkRow}>
+                        <View style={styles.checkmarkCircle}>
+                          <Text style={styles.checkmark}>✓</Text>
+                        </View>
+                        <Text style={styles.checkmarkText}>Premium AI enhancements</Text>
+                      </View>
+                      <View style={styles.checkmarkRow}>
+                        <View style={styles.checkmarkCircle}>
+                          <Text style={styles.checkmark}>✓</Text>
+                        </View>
+                        <Text style={styles.checkmarkText}>All enhancement styles</Text>
+                      </View>
+                    </View>
+
+                    {/* Pricing Cards Side by Side */}
+                    <View style={styles.pricingRow}>
+                      {/* Trial Card */}
+                      <TouchableOpacity
+                        style={[styles.pricingCard, selectedPlan === 'trial' && styles.pricingCardSelected]}
+                        onPress={() => setSelectedPlan('trial')}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.pricingLabel}>Trial</Text>
+                        <Text style={styles.pricingPrice}>$3.99</Text>
+                        <Text style={styles.pricingPeriod}>3 days</Text>
+                      </TouchableOpacity>
+
+                      {/* Pro Card */}
+                      <TouchableOpacity
+                        style={[styles.pricingCard, selectedPlan === 'pro' && styles.pricingCardSelected]}
+                        onPress={() => setSelectedPlan('pro')}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.bestDealBadge}>
+                          <Text style={styles.bestDealText}>Best Deal</Text>
+                        </View>
+                        <Text style={styles.pricingLabel}>Pro</Text>
+                        <Text style={styles.pricingPrice}>$40</Text>
+                        <Text style={styles.pricingPeriod}>per month</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* Trial Info Text */}
+                    <Text style={styles.trialInfoText}>
+                      10 photos included • 3 days for $3.99 • Cancel anytime
+                    </Text>
+
+                    {/* CTA Button */}
+                    <TouchableOpacity
+                      style={styles.ctaButton}
+                      onPress={handleStartTrial}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={['#D4AF37', '#F4E4C1']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.ctaGradient}
+                      >
+                        <Text style={styles.ctaText}>
+                          {selectedPlan === 'trial' ? 'Start Trial' : 'Subscribe to Pro'}
+                        </Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  // Page 2: Credit Bundles
+                  <>
+                    <Text style={styles.title}>Credit Bundles</Text>
+                    <Text style={styles.subtitle}>Pay as you go with flexible credit packs</Text>
+
+                    {/* Bundle Cards */}
+                    <View style={styles.bundlesColumn}>
+                      {creditBundles.map((bundle) => (
+                        <TouchableOpacity
+                          key={bundle.id}
+                          onPress={() => handleBundlePurchase(bundle)}
+                          activeOpacity={0.8}
+                          style={styles.bundleCardFull}
+                        >
+                          <View style={styles.bundleCardFullContent}>
+                            {bundle.badge && (
+                              <View style={styles.bundleBadgeFull}>
+                                <Text style={styles.bundleBadgeTextFull}>{bundle.badge}</Text>
+                              </View>
+                            )}
+                            <View style={styles.bundleInfoRow}>
+                              <View>
+                                <Text style={styles.bundleNameFull}>{bundle.name}</Text>
+                                <Text style={styles.bundlePhotosFull}>{bundle.photos} photos</Text>
+                              </View>
+                              <View style={styles.bundlePriceContainer}>
+                                <Text style={styles.bundlePriceFull}>${bundle.price.toFixed(2)}</Text>
+                                <Text style={styles.bundlePricePerPhotoFull}>${bundle.pricePerPhoto.toFixed(2)}/photo</Text>
+                              </View>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {/* CTA Button for Bundles */}
+                    <TouchableOpacity
+                      style={styles.ctaButton}
+                      onPress={() => selectedBundle && handleBundlePurchase(creditBundles.find(b => b.id === selectedBundle)!)}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={['#D4AF37', '#F4E4C1']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.ctaGradient}
+                      >
+                        <Text style={styles.ctaText}>Purchase Credits</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </>
+                )}
+
+                {/* Footer Links */}
+                <View style={styles.footer}>
+                  <TouchableOpacity activeOpacity={0.7}>
+                    <Text style={styles.footerLink}>Restore Purchases</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.footerDot}>•</Text>
+                  <TouchableOpacity activeOpacity={0.7}>
+                    <Text style={styles.footerLink}>Terms & Privacy</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </Animated.View>
+          )}
+        />
+
+        {/* Page Indicator Dots */}
+        <View style={styles.pageIndicator}>
+          {[0, 1].map((page) => (
+            <View
+              key={page}
+              style={[
+                styles.pageDot,
+                currentPage === page && styles.pageDotActive,
+              ]}
+            />
+          ))}
+        </View>
       </SafeAreaView>
     </View>
   )
@@ -573,14 +739,24 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  content: {
+  pageContainer: {
+    width: screenWidth,
+  },
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+    paddingHorizontal: 20,
+  },
+  animatedContent: {
     paddingHorizontal: 20,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
     paddingVertical: 8,
+    paddingHorizontal: 20,
   },
   closeButton: {
     width: 44,
@@ -595,150 +771,436 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    fontSize: 34,
+    fontSize: 36,
     fontWeight: '700',
     color: '#111827',
     textAlign: 'center',
-    marginBottom: 8,
-    letterSpacing: -0.5,
+    marginBottom: 40,
+    marginTop: 20,
+    letterSpacing: -1,
   },
   subtitle: {
-    fontSize: 17,
+    fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
     marginBottom: 32,
+    paddingHorizontal: 20,
   },
-  featuresContainer: {
-    marginBottom: 24,
+  // Checkmark Features
+  checkmarkFeatures: {
+    marginBottom: 48,
+    alignItems: 'flex-start',
+    paddingHorizontal: 40,
   },
-  featureRow: {
+  checkmarkRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
   },
-  featureIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(212,175,55,0.1)',
+  checkmarkCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#D4AF37',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
   },
-  featureText: {
+  checkmark: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  checkmarkText: {
     fontSize: 17,
-    color: '#374151',
+    color: '#111827',
+    fontWeight: '400',
+  },
+  // Pricing Cards Row
+  pricingRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  pricingCard: {
     flex: 1,
-  },
-  plansContainer: {
-    marginBottom: 16,
-    gap: 12,
-  },
-  planOption: {
+    backgroundColor: '#F9FAFB',
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.6)',
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.8)',
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'transparent',
+    position: 'relative',
   },
-  planOptionSelected: {
+  pricingCardSelected: {
     borderColor: '#D4AF37',
-    backgroundColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: '#FFFFFF',
   },
-  badge: {
+  bestDealBadge: {
     position: 'absolute',
-    top: 12,
-    right: 16,
+    top: -12,
     backgroundColor: '#D4AF37',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    zIndex: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
   },
-  badgeText: {
-    fontSize: 11,
+  bestDealText: {
+    fontSize: 12,
     fontWeight: '700',
     color: '#FFFFFF',
     letterSpacing: 0.5,
   },
-  planContent: {
+  pricingLabel: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 12,
+  },
+  pricingPrice: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#111827',
+    marginBottom: 6,
+    letterSpacing: -1.5,
+  },
+  pricingPeriod: {
+    fontSize: 15,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  trialInfoText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  featuresContainer: {
+    marginBottom: 32,
+    gap: 24,
+  },
+  featureRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
   },
-  radioOuter: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#D1D5DB',
+  featureIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(212,175,55,0.12)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.2)',
   },
-  radioOuterSelected: {
-    borderColor: '#D4AF37',
-  },
-  radioInner: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#D4AF37',
-  },
-  planDetails: {
+  featureTextContainer: {
     flex: 1,
   },
-  planName: {
-    fontSize: 18,
+  featureText: {
+    fontSize: 17,
     fontWeight: '600',
     color: '#111827',
     marginBottom: 2,
   },
-  planPhotos: {
+  featureSubtext: {
     fontSize: 14,
-    color: '#6B7280',
-  },
-  planSubtext: {
-    fontSize: 12,
     color: '#9CA3AF',
-    marginTop: 2,
+  },
+  plansContainer: {
+    marginBottom: 20,
+    gap: 16,
+  },
+  planOptionOuter: {
+    borderRadius: 24,
+    padding: 2,
+    overflow: 'hidden',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  planGradientBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 24,
+  },
+  planOption: {
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    overflow: 'hidden',
+  },
+  badge: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    zIndex: 1,
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.8,
+  },
+  planContent: {
+    padding: 24,
+    paddingTop: 28,
+  },
+  planHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  planName: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#111827',
+    letterSpacing: -0.5,
   },
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'baseline',
   },
   planPrice: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#111827',
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#D4AF37',
   },
   planPeriod: {
-    fontSize: 14,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  planDetailsSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(212,175,55,0.08)',
+    borderRadius: 16,
+    padding: 20,
+  },
+  planStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  planStatNumber: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  planStatLabel: {
+    fontSize: 13,
     color: '#6B7280',
+    textAlign: 'center',
+  },
+  planDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(212,175,55,0.2)',
+    marginHorizontal: 16,
+  },
+  // Token Card Styles
+  tokenCard: {
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    padding: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.15)',
+  },
+  tokenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  tokenIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(212,175,55,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.2)',
+  },
+  tokenInfo: {
+    flex: 1,
+  },
+  tokenTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 2,
+  },
+  tokenSubtitle: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  tokenPriceContainer: {
+    alignItems: 'flex-end',
+  },
+  tokenPrice: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#D4AF37',
+  },
+  tokenPriceLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  // Expand Button Styles
+  expandButton: {
+    marginTop: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  expandButtonBlur: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.1)',
+    gap: 8,
+  },
+  expandButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  // Bundle Grid Styles
+  bundlesGridContainer: {
+    overflow: 'hidden',
+  },
+  bundlesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+  },
+  bundleCardWrapper: {
+    width: '48%',
+  },
+  bundleCard: {
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.75)',
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.15)',
+    minHeight: 160,
+    justifyContent: 'space-between',
+  },
+  bundleBadge: {
+    position: 'absolute',
+    top: -8,
+    backgroundColor: '#D4AF37',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    zIndex: 1,
+  },
+  bundleBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  discountBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.3)',
+  },
+  discountText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  bundleName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 8,
+  },
+  bundlePhotos: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -1,
+  },
+  bundlePhotosLabel: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginBottom: 12,
+  },
+  bundlePriceRow: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  bundlePrice: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#D4AF37',
+  },
+  bundlePricePerPhoto: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#9CA3AF',
   },
   trialInfo: {
     fontSize: 15,
     color: '#6B7280',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   ctaButton: {
-    borderRadius: 14,
+    borderRadius: 30,
     overflow: 'hidden',
-    marginBottom: 20,
+    marginBottom: 24,
+    marginHorizontal: 20,
     shadowColor: '#D4AF37',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
   ctaGradient: {
-    paddingVertical: 18,
+    paddingVertical: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   ctaText: {
-    fontSize: 18,
-    fontWeight: '600',
+    fontSize: 19,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
   footer: {
@@ -755,5 +1217,235 @@ const styles = StyleSheet.create({
   footerDot: {
     fontSize: 14,
     color: '#D1D5DB',
+  },
+  // Compact Layout Styles
+  featuresRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 24,
+    paddingHorizontal: 10,
+  },
+  featureIconCompact: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  featureIconLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6B7280',
+    textAlign: 'center',
+  },
+  planContentCompact: {
+    padding: 20,
+  },
+  planRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  planNameCompact: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  planDescCompact: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  priceContainerCompact: {
+    alignItems: 'flex-end',
+  },
+  planPriceCompact: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#D4AF37',
+  },
+  planPeriodCompact: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9CA3AF',
+  },
+  // Section Title
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6B7280',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  // Trial Card Styles
+  trialContainer: {
+    marginTop: 16,
+  },
+  trialCard: {
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.15)',
+  },
+  trialContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  trialTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  trialDesc: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  trialPrice: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#D4AF37',
+  },
+  // Bundle Container
+  bundlesRowContainer: {
+    marginTop: 20,
+  },
+  bundlesGrid: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  bundleCardCompact: {
+    flex: 1,
+  },
+  bundleCardCompactBlur: {
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(212,175,55,0.15)',
+  },
+  bundleBadgeCompact: {
+    position: 'absolute',
+    top: -6,
+    backgroundColor: '#D4AF37',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  bundleBadgeTextCompact: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  bundlePhotosCompact: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: '#111827',
+    letterSpacing: -1,
+  },
+  bundlePhotosLabelCompact: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 8,
+  },
+  bundlePriceCompact: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#D4AF37',
+    marginBottom: 4,
+  },
+  bundlePricePerPhoto: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#9CA3AF',
+  },
+  tokenInfoText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  // Page Indicator
+  pageIndicator: {
+    position: 'absolute',
+    bottom: 60,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pageDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(212, 175, 55, 0.3)',
+  },
+  pageDotActive: {
+    backgroundColor: '#D4AF37',
+    width: 24,
+  },
+  // Bundle Cards for Page 2
+  bundlesColumn: {
+    gap: 12,
+    marginBottom: 32,
+  },
+  bundleCardFull: {
+    borderRadius: 16,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    overflow: 'hidden',
+  },
+  bundleCardFullContent: {
+    padding: 20,
+    position: 'relative',
+  },
+  bundleBadgeFull: {
+    position: 'absolute',
+    top: -8,
+    right: 16,
+    backgroundColor: '#D4AF37',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 10,
+    zIndex: 10,
+  },
+  bundleBadgeTextFull: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  bundleInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  bundleNameFull: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  bundlePhotosFull: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  bundlePriceContainer: {
+    alignItems: 'flex-end',
+  },
+  bundlePriceFull: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#D4AF37',
+    marginBottom: 2,
+  },
+  bundlePricePerPhotoFull: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#9CA3AF',
   },
 })
