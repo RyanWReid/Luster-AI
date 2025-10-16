@@ -24,6 +24,7 @@ from database import (Asset, Credit, Job, JobEvent, JobStatus, Shoot, User,
 from logger import (LoggingMiddleware, log_credit_transaction,
                     log_health_check, log_job_created, log_upload_completed,
                     log_upload_started, logger)
+from admin import router as admin_router
 
 load_dotenv()
 
@@ -36,15 +37,22 @@ if sentry_dsn:
             FastApiIntegration(auto_enabling_integrations=True),
             SqlalchemyIntegration(),
         ],
-        traces_sample_rate=0.1,  # 10% of transactions for performance monitoring
+        # Adjust sampling rate based on environment
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.25")),
         environment=os.getenv("ENVIRONMENT", "development"),
         release=os.getenv("APP_VERSION", "1.0.0"),
+        # Additional performance monitoring configuration
+        profiles_sample_rate=0.1,  # Profile 10% of transactions
+        send_default_pii=False,  # Don't send personally identifiable information
     )
-    logger.info("Sentry initialized")
+    logger.info(f"Sentry initialized with {os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.25')} trace sampling")
 else:
     logger.warning("SENTRY_DSN not set, Sentry not initialized")
 
 app = FastAPI(title="Luster AI API", version="1.0.0")
+
+# Include admin monitoring router
+app.include_router(admin_router)
 
 # Add structured logging middleware
 app.add_middleware(LoggingMiddleware)
@@ -644,6 +652,36 @@ def mobile_get_styles():
             }
         ]
     }
+
+
+# ============================================================================
+# RQ Dashboard Integration (Optional)
+# ============================================================================
+
+# Try to mount RQ Dashboard if Redis is available
+try:
+    import redis
+    from rq import Queue
+
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        # Test Redis connection
+        redis_conn = redis.from_url(redis_url)
+        redis_conn.ping()
+
+        # Try to import and mount RQ Dashboard Fast
+        try:
+            from rq_dashboard_fast import RedisQueueDashboard
+
+            dashboard = RedisQueueDashboard(redis_url)
+            app.mount("/admin/rq", dashboard)
+            logger.info("RQ Dashboard mounted at /admin/rq")
+        except ImportError:
+            logger.warning("rq-dashboard-fast not installed. Install with: pip install rq-dashboard-fast")
+    else:
+        logger.info("REDIS_URL not set, skipping RQ Dashboard")
+except Exception as e:
+    logger.warning(f"Could not initialize RQ Dashboard: {e}")
 
 
 if __name__ == "__main__":
