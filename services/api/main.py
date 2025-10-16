@@ -66,8 +66,8 @@ Path(UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
 Path(OUTPUTS_DIR).mkdir(parents=True, exist_ok=True)
 
 # Default user ID for local development (matches schema.sql)
-# Must be UUID object for SQLAlchemy Uuid type compatibility
-DEFAULT_USER_ID = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
+# Using string format since UUIDType is now String(36) for SQLite compatibility
+DEFAULT_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 
 # Pydantic models for mobile API
 class Base64ImageRequest(BaseModel):
@@ -602,6 +602,29 @@ def mobile_job_status(job_id: str, db: Session = Depends(get_db)):
         result["error"] = job.error_message
     
     return result
+
+
+@app.get("/api/mobile/credits")
+def mobile_get_credits(db: Session = Depends(get_db)):
+    """Get user credit balance for mobile"""
+    # Get or create user
+    user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
+    if not user:
+        user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
+        db.add(user)
+        db.flush()
+
+    # Get or create credits
+    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
+    if not credit:
+        credit = Credit(user_id=user.id, balance=10)
+        db.add(credit)
+        db.commit()
+
+    return {
+        "balance": credit.balance,
+        "user_id": str(user.id)
+    }
 
 
 @app.get("/api/mobile/styles")
