@@ -27,6 +27,11 @@ interface StyleInfo {
   description: string
 }
 
+interface CreditBalanceResponse {
+  balance: number
+  user_id: string
+}
+
 class EnhancementService {
   /**
    * Convert a URI to a Blob for upload
@@ -449,6 +454,25 @@ class EnhancementService {
     }
     
     return null
+  }
+
+  /**
+   * Get user credit balance
+   */
+  async getCreditBalance(): Promise<number> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/mobile/credits`)
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch credits: ${response.status}`)
+      }
+
+      const data: CreditBalanceResponse = await response.json()
+      return data.balance
+    } catch (error) {
+      console.error('Error fetching credit balance:', error)
+      throw error
+    }
   }
 }
 

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react'
-import AsyncStorage from '@react-native-async-storage/async-storage'
+import enhancementService from '../services/enhancementService'
 
 interface PhotoContextType {
   selectedPhotos: string[]
@@ -29,18 +29,12 @@ export function PhotoProvider({ children }: { children: ReactNode }) {
   const refreshCredits = async () => {
     setIsLoadingCredits(true)
     try {
-      // TODO(human): Implement API call to fetch user credits
-      // For now, we'll use a mock value from AsyncStorage
-      const storedCredits = await AsyncStorage.getItem('userCredits')
-      if (storedCredits) {
-        setCreditBalance(parseInt(storedCredits, 10))
-      } else {
-        // Default mock value
-        setCreditBalance(10)
-        await AsyncStorage.setItem('userCredits', '10')
-      }
+      const balance = await enhancementService.getCreditBalance()
+      setCreditBalance(balance)
+      console.log(`✅ Fetched credit balance: ${balance}`)
     } catch (error) {
       console.error('Failed to fetch credits:', error)
+      // Fallback to 0 if API fails
       setCreditBalance(0)
     } finally {
       setIsLoadingCredits(false)
