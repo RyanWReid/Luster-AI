@@ -12,6 +12,7 @@ import ProcessingScreen from '../screens/ProcessingScreen'
 import ResultScreen from '../screens/ResultScreen'
 import ProjectScreen from '../screens/ProjectScreen'
 import CreditsScreen from '../screens/CreditsScreen'
+import AllPropertiesScreen from '../screens/AllPropertiesScreen'
 import MainTabs from './MainTabs'
 
 export type RootStackParamList = {
@@ -21,11 +22,12 @@ export type RootStackParamList = {
   Main: undefined
   NewListing: undefined
   StyleSelection: undefined
-  Confirmation: undefined
+  Confirmation: { style: string; photoCount: number }
   Processing: undefined
   Result: undefined
-  Project: undefined
+  Project: { property?: any }
   Credits: undefined
+  AllProperties: undefined
 }
 
 const Stack = createStackNavigator<RootStackParamList>()
@@ -50,6 +52,7 @@ export default function RootNavigator() {
             <Stack.Screen name="Result" component={ResultScreen} />
             <Stack.Screen name="Project" component={ProjectScreen} />
             <Stack.Screen name="Credits" component={CreditsScreen} />
+            <Stack.Screen name="AllProperties" component={AllPropertiesScreen} />
           </>
         ) : (
           <>

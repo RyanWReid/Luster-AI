@@ -26,12 +26,18 @@ export default function ComparisonSlider({
   afterImage,
   height = 400
 }: ComparisonSliderProps) {
+  const [containerWidth, setContainerWidth] = useState(SCREEN_WIDTH)
   const [sliderPosition, setSliderPosition] = useState(SCREEN_WIDTH / 2)
   const slideAnim = useRef(new Animated.Value(SCREEN_WIDTH / 2)).current
   const pulseAnim = useRef(new Animated.Value(1)).current
   const labelOpacity = useRef(new Animated.Value(1)).current
 
   useEffect(() => {
+    // Reset slider to center when container width changes
+    const centerPosition = containerWidth / 2
+    setSliderPosition(centerPosition)
+    slideAnim.setValue(centerPosition)
+
     // Initial pulse animation to draw attention
     Animated.sequence([
       Animated.timing(pulseAnim, {
@@ -54,7 +60,7 @@ export default function ComparisonSlider({
         useNativeDriver: true,
       }).start()
     }, 3000)
-  }, [])
+  }, [containerWidth])
 
   const panResponder = useRef(
     PanResponder.create({
@@ -75,7 +81,7 @@ export default function ComparisonSlider({
       onPanResponderMove: (_, gestureState) => {
         const newPosition = Math.min(
           Math.max(30, sliderPosition + gestureState.dx),
-          SCREEN_WIDTH - 30
+          containerWidth - 30
         )
 
         slideAnim.setValue(newPosition)
@@ -83,8 +89,8 @@ export default function ComparisonSlider({
         // Haptic feedback at edges and center
         const prevPosition = sliderPosition
         if (
-          (prevPosition > SCREEN_WIDTH / 2 - 5 && newPosition <= SCREEN_WIDTH / 2 + 5) ||
-          (prevPosition < SCREEN_WIDTH / 2 + 5 && newPosition >= SCREEN_WIDTH / 2 - 5)
+          (prevPosition > containerWidth / 2 - 5 && newPosition <= containerWidth / 2 + 5) ||
+          (prevPosition < containerWidth / 2 + 5 && newPosition >= containerWidth / 2 - 5)
         ) {
           hapticFeedback.light()
         }
@@ -93,7 +99,7 @@ export default function ComparisonSlider({
       onPanResponderRelease: (_, gestureState) => {
         const newPosition = Math.min(
           Math.max(30, sliderPosition + gestureState.dx),
-          SCREEN_WIDTH - 30
+          containerWidth - 30
         )
 
         setSliderPosition(newPosition)
@@ -125,7 +131,13 @@ export default function ComparisonSlider({
   ).current
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View
+      style={[styles.container, { height }]}
+      onLayout={(event) => {
+        const { width } = event.nativeEvent.layout
+        setContainerWidth(width)
+      }}
+    >
       {/* After Image (Right) */}
       <View style={styles.imageContainer}>
         <Image source={afterImage} style={styles.image} resizeMode="cover" />
@@ -140,7 +152,11 @@ export default function ComparisonSlider({
           },
         ]}
       >
-        <Image source={beforeImage} style={styles.image} resizeMode="cover" />
+        <Image
+          source={beforeImage}
+          style={[styles.beforeImage, { width: containerWidth }]}
+          resizeMode="cover"
+        />
       </Animated.View>
 
       {/* Labels */}
@@ -224,9 +240,10 @@ export default function ComparisonSlider({
 
 const styles = StyleSheet.create({
   container: {
-    width: SCREEN_WIDTH,
+    width: '100%',
     overflow: 'hidden',
     backgroundColor: '#000000',
+    position: 'relative',
   },
   imageContainer: {
     position: 'absolute',
@@ -245,6 +262,9 @@ const styles = StyleSheet.create({
     left: 0,
     bottom: 0,
     overflow: 'hidden',
+  },
+  beforeImage: {
+    height: '100%',
   },
   sliderLine: {
     position: 'absolute',
