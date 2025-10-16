@@ -18,9 +18,14 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()
 
-# SQLAlchemy 2.0's Uuid type handles both PostgreSQL UUID and SQLite CHAR(32)
-# Automatically adapts based on database backend
-UUIDType = Uuid
+# For SQLite, use String(36) to store UUIDs
+# For PostgreSQL in production, this could be changed to Uuid type
+UUIDType = String(36)
+
+# Helper for default UUID generation - returns string
+def generate_uuid():
+    """Generate UUID as string"""
+    return str(uuid.uuid4())
 
 
 class JobStatus(enum.Enum):
@@ -33,7 +38,7 @@ class JobStatus(enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    id = Column(UUIDType, primary_key=True, default=generate_uuid)
     email = Column(String(255), unique=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -47,7 +52,7 @@ class User(Base):
 class Credit(Base):
     __tablename__ = "credits"
 
-    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    id = Column(UUIDType, primary_key=True, default=generate_uuid)
     user_id = Column(
         UUIDType, ForeignKey("users.id"), nullable=False, unique=True
     )
@@ -61,7 +66,7 @@ class Credit(Base):
 class Shoot(Base):
     __tablename__ = "shoots"
 
-    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    id = Column(UUIDType, primary_key=True, default=generate_uuid)
     user_id = Column(UUIDType, ForeignKey("users.id"), nullable=False)
     name = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -74,7 +79,7 @@ class Shoot(Base):
 class Asset(Base):
     __tablename__ = "assets"
 
-    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    id = Column(UUIDType, primary_key=True, default=generate_uuid)
     shoot_id = Column(UUIDType, ForeignKey("shoots.id"), nullable=False)
     user_id = Column(UUIDType, ForeignKey("users.id"), nullable=False)
     original_filename = Column(String(255), nullable=False)
@@ -92,7 +97,7 @@ class Asset(Base):
 class Job(Base):
     __tablename__ = "jobs"
 
-    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    id = Column(UUIDType, primary_key=True, default=generate_uuid)
     asset_id = Column(UUIDType, ForeignKey("assets.id"), nullable=False)
     user_id = Column(UUIDType, ForeignKey("users.id"), nullable=False)
     prompt = Column(Text, nullable=False)
@@ -113,7 +118,7 @@ class Job(Base):
 class JobEvent(Base):
     __tablename__ = "job_events"
 
-    id = Column(UUIDType, primary_key=True, default=uuid.uuid4)
+    id = Column(UUIDType, primary_key=True, default=generate_uuid)
     job_id = Column(UUIDType, ForeignKey("jobs.id"), nullable=False)
     event_type = Column(String(50), nullable=False)
     details = Column(Text)  # JSON as text for simplicity
