@@ -18,6 +18,11 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from PIL import Image
+from pillow_heif import register_heif_opener
+
+# Register HEIF opener so PIL can handle HEIC files
+register_heif_opener()
 
 from database import (Asset, Credit, Job, JobEvent, JobStatus, Shoot, User,
                       get_db)
@@ -25,6 +30,7 @@ from logger import (LoggingMiddleware, log_credit_transaction,
                     log_health_check, log_job_created, log_upload_completed,
                     log_upload_started, logger)
 from admin import router as admin_router
+from revenue_cat import router as revenuecat_router
 
 load_dotenv()
 
@@ -54,6 +60,9 @@ app = FastAPI(title="Luster AI API", version="1.0.0")
 # Include admin monitoring router
 app.include_router(admin_router)
 
+# Include RevenueCat webhook router
+app.include_router(revenuecat_router)
+
 # Add structured logging middleware
 app.add_middleware(LoggingMiddleware)
 
@@ -66,8 +75,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOADS_DIR = os.getenv("UPLOADS_DIR", "../../uploads")
-OUTPUTS_DIR = os.getenv("OUTPUTS_DIR", "../../outputs")
+# Convert to absolute paths to avoid issues with relative paths
+UPLOADS_DIR = os.path.abspath(os.getenv("UPLOADS_DIR", "../../uploads"))
+OUTPUTS_DIR = os.path.abspath(os.getenv("OUTPUTS_DIR", "../../outputs"))
 
 # Ensure directories exist
 Path(UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
@@ -76,6 +86,38 @@ Path(OUTPUTS_DIR).mkdir(parents=True, exist_ok=True)
 # Default user ID for local development (matches schema.sql)
 # Using string format since UUIDType is now String(36) for SQLite compatibility
 DEFAULT_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
+
+
+def convert_to_jpg(input_path: str, output_path: str, quality: int = 95) -> None:
+    """
+    Convert any image format (including HEIC) to JPG.
+
+    Args:
+        input_path: Path to input image (can be HEIC, PNG, etc.)
+        output_path: Path where JPG should be saved
+        quality: JPG quality (1-100, default 95)
+    """
+    try:
+        # Open image (PIL will use HEIF opener for HEIC files)
+        with Image.open(input_path) as img:
+            # Convert to RGB if needed (RGBA, P, etc.)
+            if img.mode in ('RGBA', 'LA', 'P'):
+                # Create white background for transparency
+                background = Image.new('RGB', img.size, (255, 255, 255))
+                if img.mode == 'P':
+                    img = img.convert('RGBA')
+                background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                img = background
+            elif img.mode != 'RGB':
+                img = img.convert('RGB')
+
+            # Save as JPG
+            img.save(output_path, 'JPEG', quality=quality, optimize=True)
+            print(f"Converted {input_path} to JPG: {output_path}")
+    except Exception as e:
+        print(f"Error converting image: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to process image: {str(e)}")
+
 
 # Pydantic models for mobile API
 class Base64ImageRequest(BaseModel):
@@ -413,13 +455,37 @@ async def mobile_enhance(
     unique_filename = f"mobile_{uuid.uuid4()}{file_ext}"
     file_path = os.path.join(UPLOADS_DIR, unique_filename)
     
-    # Save file
+    # Save file temporarily
     with open(file_path, "wb") as buffer:
         buffer.write(file_content)
-    
+
+    print(f"File saved temporarily: {file_path}")
+
+    # Check if file needs conversion (HEIC or other formats)
+    # Check both file extension and content-type header
+    is_heic = (
+        file_ext.lower() in ['.heic', '.heif'] or
+        not file_ext or
+        (image.content_type and 'heic' in image.content_type.lower()) or
+        (image.content_type and 'heif' in image.content_type.lower())
+    )
+
+    if is_heic:
+        # Always save as .jpg for processing
+        jpg_filename = f"mobile_{uuid.uuid4()}.jpg"
+        jpg_path = os.path.join(UPLOADS_DIR, jpg_filename)
+
+        print(f"Converting HEIC/HEIF (content-type: {image.content_type}, ext: {file_ext}) to JPG...")
+        convert_to_jpg(file_path, jpg_path)
+
+        # Remove original HEIC file
+        os.remove(file_path)
+        file_path = jpg_path
+        print(f"Converted to JPG: {jpg_path}")
+
     file_size = os.path.getsize(file_path)
-    print(f"File saved: {file_path}, size: {file_size} bytes")
-    
+    print(f"Final file: {file_path}, size: {file_size} bytes")
+
     # Create asset
     asset = Asset(
         shoot_id=mobile_shoot.id,
@@ -427,7 +493,7 @@ async def mobile_enhance(
         original_filename=image.filename or "photo.jpg",
         file_path=file_path,
         file_size=file_size,
-        mime_type=image.content_type or "image/jpeg",
+        mime_type="image/jpeg",  # Always JPG after conversion
     )
     db.add(asset)
     db.flush()
@@ -515,14 +581,26 @@ async def mobile_enhance_base64(
         db.add(mobile_shoot)
         db.flush()
     
-    # Save image data
-    unique_filename = f"mobile_{uuid.uuid4()}.jpg"
-    file_path = os.path.join(UPLOADS_DIR, unique_filename)
-    
-    with open(file_path, "wb") as f:
+    # Save image data temporarily
+    temp_filename = f"mobile_{uuid.uuid4()}_temp"
+    temp_path = os.path.join(UPLOADS_DIR, temp_filename)
+
+    with open(temp_path, "wb") as f:
         f.write(image_data)
-    
-    file_size = len(image_data)
+
+    # Convert to JPG (handles HEIC and other formats)
+    final_filename = f"mobile_{uuid.uuid4()}.jpg"
+    file_path = os.path.join(UPLOADS_DIR, final_filename)
+
+    try:
+        convert_to_jpg(temp_path, file_path)
+        os.remove(temp_path)  # Remove temporary file
+    except Exception as e:
+        # If conversion fails, just use the original file
+        print(f"Conversion failed, using original: {e}")
+        os.rename(temp_path, file_path)
+
+    file_size = os.path.getsize(file_path)
     print(f"File saved: {file_path}, size: {file_size} bytes")
     
     # Create asset
@@ -631,7 +709,8 @@ def mobile_get_credits(db: Session = Depends(get_db)):
 
     return {
         "balance": credit.balance,
-        "user_id": str(user.id)
+        "user_id": str(user.id),
+        "updated_at": credit.updated_at.isoformat() if hasattr(credit, 'updated_at') and credit.updated_at else None
     }
 
 
