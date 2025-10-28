@@ -11,12 +11,16 @@ import {
   StatusBar,
   ScrollView,
   FlatList,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
+import { PurchasesPackage } from 'react-native-purchases'
+import hapticFeedback from '../utils/haptics'
+import { useRevenueCat } from '../hooks/useRevenueCat'
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window')
 
@@ -174,6 +178,9 @@ export default function CreditsScreen() {
   const [currentPage, setCurrentPage] = useState<number>(0)
   const flatListRef = useRef<FlatList>(null)
 
+  // RevenueCat integration
+  const { offerings, loading, hasActiveSubscription, purchasePackage, restorePurchases } = useRevenueCat()
+
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(30)).current
@@ -276,6 +283,7 @@ export default function CreditsScreen() {
   }, [])
 
   const toggleBundles = () => {
+    hapticFeedback.light()
     const toValue = showBundles ? 0 : 1
     setShowBundles(!showBundles)
 
@@ -294,39 +302,106 @@ export default function CreditsScreen() {
     ]).start()
   }
 
-  const handleBundlePurchase = (bundle: CreditBundle) => {
+  // Helper to find RevenueCat package by identifier
+  const findPackage = (identifier: string): PurchasesPackage | null => {
+    if (!offerings) return null
+
+    // TODO(human): Map your bundle IDs to RevenueCat package identifiers
+    // These should match the product IDs you set up in App Store Connect and RevenueCat
+    // Example: 'small' -> 'com.lusterai.credits.small'
+    const packageMap: Record<string, string> = {
+      'trial': 'com.lusterai.trial',
+      'pro': 'com.lusterai.pro.monthly',
+      'small': 'com.lusterai.credits.small',
+      'medium': 'com.lusterai.credits.medium',
+      'large': 'com.lusterai.credits.large',
+    }
+
+    const productId = packageMap[identifier]
+    if (!productId) return null
+
+    return offerings.availablePackages.find(pkg =>
+      pkg.product.identifier === productId
+    ) || null
+  }
+
+  const handleBundlePurchase = async (bundle: CreditBundle) => {
+    hapticFeedback.medium()
+
+    // Find the RevenueCat package
+    const pkg = findPackage(bundle.id)
+
+    if (!pkg) {
+      Alert.alert(
+        'Error',
+        'This product is not available yet. Please try again later.',
+        [{ text: 'OK', onPress: () => hapticFeedback.light() }]
+      )
+      return
+    }
+
+    // Show confirmation
     Alert.alert(
       'Purchase Credits',
-      `${bundle.photos} photos for $${bundle.price}${bundle.discount ? ` (Save ${bundle.discount})` : ''}`,
+      `${bundle.photos} photos for ${pkg.product.priceString}${bundle.discount ? ` (Save ${bundle.discount})` : ''}`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => hapticFeedback.light() },
         {
           text: 'Buy Now',
-          onPress: () => {
-            Alert.alert('Success!', `${bundle.photos} credits added to your account!`)
-            navigation.goBack()
+          onPress: async () => {
+            const success = await purchasePackage(pkg)
+            if (success) {
+              // Navigate back after successful purchase
+              setTimeout(() => navigation.goBack(), 1500)
+            }
           },
         },
       ]
     )
   }
 
-  const handleStartTrial = () => {
+  const handleStartTrial = async () => {
+    hapticFeedback.medium()
+
+    // Find the appropriate package
+    const pkg = findPackage(selectedPlan)
+
+    if (!pkg) {
+      Alert.alert(
+        'Error',
+        'This subscription is not available yet. Please try again later.',
+        [{ text: 'OK', onPress: () => hapticFeedback.light() }]
+      )
+      return
+    }
+
     const selected = plans.find(p => p.id === selectedPlan)
+
     Alert.alert(
-      'Start Your Free Trial',
-      `7 days free, then ${selected?.price}/${selected?.period}`,
+      selectedPlan === 'trial' ? 'Start Your Trial' : 'Subscribe to Pro',
+      `${pkg.product.priceString}${selectedPlan === 'pro' ? ' per month' : ' for 3 days'}`,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => hapticFeedback.light() },
         {
-          text: 'Start Trial',
-          onPress: () => {
-            Alert.alert('Welcome to Pro!', 'Your 7-day free trial has started. Create amazing listings!')
-            navigation.goBack()
+          text: selectedPlan === 'trial' ? 'Start Trial' : 'Subscribe',
+          onPress: async () => {
+            const success = await purchasePackage(pkg)
+            if (success) {
+              // Navigate back after successful purchase
+              setTimeout(() => navigation.goBack(), 1500)
+            }
           },
         },
       ]
     )
+  }
+
+  const handleRestorePurchases = async () => {
+    const success = await restorePurchases()
+    if (success) {
+      // Optionally navigate back after restore
+      setTimeout(() => navigation.goBack(), 1500)
+    }
   }
 
   return (
@@ -341,6 +416,14 @@ export default function CreditsScreen() {
           style={StyleSheet.absoluteFillObject}
         />
       </Animated.View>
+
+      {/* Loading indicator while RevenueCat initializes */}
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#D4AF37" />
+          <Text style={styles.loadingText}>Loading payment options...</Text>
+        </View>
+      )}
 
       {/* Organic Blob Shapes - Same as Welcome Screen */}
       <Animated.View
@@ -484,7 +567,10 @@ export default function CreditsScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => navigation.goBack()}
+            onPress={() => {
+              hapticFeedback.light()
+              navigation.goBack()
+            }}
             style={styles.closeButton}
             activeOpacity={0.7}
           >
@@ -553,7 +639,10 @@ export default function CreditsScreen() {
                       {/* Trial Card */}
                       <TouchableOpacity
                         style={[styles.pricingCard, selectedPlan === 'trial' && styles.pricingCardSelected]}
-                        onPress={() => setSelectedPlan('trial')}
+                        onPress={() => {
+                          hapticFeedback.selection()
+                          setSelectedPlan('trial')
+                        }}
                         activeOpacity={0.8}
                       >
                         <Text style={styles.pricingLabel}>Trial</Text>
@@ -564,7 +653,10 @@ export default function CreditsScreen() {
                       {/* Pro Card */}
                       <TouchableOpacity
                         style={[styles.pricingCard, selectedPlan === 'pro' && styles.pricingCardSelected]}
-                        onPress={() => setSelectedPlan('pro')}
+                        onPress={() => {
+                          hapticFeedback.selection()
+                          setSelectedPlan('pro')
+                        }}
                         activeOpacity={0.8}
                       >
                         <View style={styles.bestDealBadge}>
@@ -655,7 +747,11 @@ export default function CreditsScreen() {
 
                 {/* Footer Links */}
                 <View style={styles.footer}>
-                  <TouchableOpacity activeOpacity={0.7}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={handleRestorePurchases}
+                    disabled={loading}
+                  >
                     <Text style={styles.footerLink}>Restore Purchases</Text>
                   </TouchableOpacity>
                   <Text style={styles.footerDot}>•</Text>
@@ -1447,5 +1543,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#9CA3AF',
+  },
+  // Loading overlay
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: '500',
   },
 })
