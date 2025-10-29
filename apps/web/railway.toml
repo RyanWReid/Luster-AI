@@ -10,5 +10,5 @@ restartPolicyMaxRetries = 10
 path = "/"
 timeout = 300
 
-[build.watchPatterns]
-includes = ["apps/web/**"]
+[[build.watchPaths]]
+paths = ["apps/web/**"]

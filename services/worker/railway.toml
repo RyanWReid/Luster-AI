@@ -6,5 +6,5 @@ startCommand = "python worker.py"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
-[build.watchPatterns]
-includes = ["services/worker/**"]
+[[build.watchPaths]]
+paths = ["services/worker/**"]

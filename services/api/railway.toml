@@ -10,5 +10,5 @@ restartPolicyMaxRetries = 10
 path = "/health"
 timeout = 300
 
-[build.watchPatterns]
-includes = ["services/api/**"]
+[[build.watchPaths]]
+paths = ["services/api/**"]
