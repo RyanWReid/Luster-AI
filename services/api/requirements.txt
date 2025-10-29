@@ -6,6 +6,7 @@ psycopg2-binary
 pydantic
 python-dotenv
 pillow
+pillow-heif
 openai>=1.0.0
 requests>=2.31.0
 
