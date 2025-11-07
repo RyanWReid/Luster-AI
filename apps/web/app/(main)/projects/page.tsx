@@ -20,7 +20,8 @@ import {
   Grid3X3,
   List
 } from 'lucide-react'
-import type { Project, User } from '@/app/types'
+import type { Project, User, Shoot } from '@/app/types'
+import { shootsApi } from '@/app/lib/api'
 
 interface ProjectsContentProps {}
 
@@ -31,6 +32,7 @@ function ProjectsContent({}: ProjectsContentProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [sortBy, setSortBy] = useState<'recent' | 'name' | 'count'>('recent')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'in_progress' | 'completed' | 'draft'>('all')
   
   const router = useRouter()
   const supabase = createClientComponentClient()
@@ -107,12 +109,31 @@ function ProjectsContent({}: ProjectsContentProps) {
   const loadProjects = async () => {
     setLoading(true)
     try {
-      // For now, use mock data
-      await new Promise(resolve => setTimeout(resolve, 1000)) // Simulate API delay
-      setProjects(mockProjects)
+      // Fetch shoots from backend
+      const response = await shootsApi.list()
+
+      // Map shoots to projects
+      const mappedProjects: Project[] = response.shoots.map((shoot: Shoot) => ({
+        id: shoot.id,
+        user_id: shoot.user_id,
+        name: shoot.name,
+        description: undefined,
+        created_at: shoot.created_at,
+        updated_at: shoot.updated_at,
+        assets: [],
+        share_link: undefined,
+        is_shared: false,
+        asset_count: shoot.asset_count || 0,
+        status: shoot.status,
+        job_statuses: shoot.job_statuses
+      }))
+
+      setProjects(mappedProjects)
     } catch (error) {
       console.error('Error loading projects:', error)
       errorToast('Failed to load projects')
+      // Fall back to empty array on error
+      setProjects([])
     } finally {
       setLoading(false)
     }
@@ -144,10 +165,17 @@ function ProjectsContent({}: ProjectsContentProps) {
     }
   }
 
-  const filteredProjects = projects.filter(project =>
-    project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (project.description && project.description.toLowerCase().includes(searchQuery.toLowerCase()))
-  )
+  const filteredProjects = projects
+    .filter(project => {
+      // Search filter
+      const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (project.description && project.description.toLowerCase().includes(searchQuery.toLowerCase()))
+
+      // Status filter
+      const matchesStatus = filterStatus === 'all' || project.status === filterStatus
+
+      return matchesSearch && matchesStatus
+    })
 
   const sortedProjects = [...filteredProjects].sort((a, b) => {
     switch (sortBy) {
@@ -168,6 +196,22 @@ function ProjectsContent({}: ProjectsContentProps) {
       day: 'numeric',
       year: 'numeric'
     })
+  }
+
+  const getStatusBadge = (status?: string) => {
+    if (!status) return null
+
+    const statusConfig = {
+      in_progress: { label: 'In Progress', variant: 'warning' as const },
+      completed: { label: 'Completed', variant: 'success' as const },
+      failed: { label: 'Failed', variant: 'error' as const },
+      draft: { label: 'Draft', variant: 'neutral' as const }
+    }
+
+    const config = statusConfig[status as keyof typeof statusConfig]
+    if (!config) return null
+
+    return <Badge variant={config.variant}>{config.label}</Badge>
   }
 
   if (loading) {
@@ -202,18 +246,34 @@ function ProjectsContent({}: ProjectsContentProps) {
                 />
               </div>
               
-              {/* Sort Controls */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-neutral-700">Sort by:</span>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'recent' | 'name' | 'count')}
-                  className="px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="recent">Recent</option>
-                  <option value="name">Name</option>
-                  <option value="count">Photo Count</option>
-                </select>
+              {/* Filter and Sort Controls */}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-neutral-700">Status:</span>
+                  <select
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value as 'all' | 'in_progress' | 'completed' | 'draft')}
+                    className="px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="all">All</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="draft">Draft</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-neutral-700">Sort by:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'recent' | 'name' | 'count')}
+                    className="px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="recent">Recent</option>
+                    <option value="name">Name</option>
+                    <option value="count">Photo Count</option>
+                  </select>
+                </div>
               </div>
             </div>
             
@@ -325,12 +385,15 @@ function ProjectsContent({}: ProjectsContentProps) {
                           <Image className="h-5 w-5" />
                           <span className="font-medium">{project.asset_count} photos</span>
                         </div>
-                        
-                        {project.is_shared && (
-                          <Badge variant="primary">
-                            Shared
-                          </Badge>
-                        )}
+
+                        <div className="flex items-center gap-2">
+                          {getStatusBadge(project.status)}
+                          {project.is_shared && (
+                            <Badge variant="primary">
+                              Shared
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                       
                       <div className="flex items-center gap-2 text-neutral-500">
@@ -370,17 +433,20 @@ function ProjectsContent({}: ProjectsContentProps) {
                               <Image className="h-5 w-5" />
                               <span className="font-medium">{project.asset_count} photos</span>
                             </div>
-                            
+
                             <div className="flex items-center gap-2">
                               <Calendar className="h-5 w-5" />
                               <span>{formatDate(project.updated_at)}</span>
                             </div>
-                            
-                            {project.is_shared && (
-                              <Badge variant="primary">
-                                Shared
-                              </Badge>
-                            )}
+
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(project.status)}
+                              {project.is_shared && (
+                                <Badge variant="primary">
+                                  Shared
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>

@@ -19,6 +19,14 @@ export type Shoot = {
   name: string
   created_at: string
   updated_at: string
+  asset_count?: number
+  job_statuses?: {
+    queued: number
+    processing: number
+    succeeded: number
+    failed: number
+  }
+  status?: 'draft' | 'in_progress' | 'completed' | 'failed'
 }
 
 export type Asset = {
@@ -93,6 +101,13 @@ export type Project = {
   share_link?: string
   is_shared: boolean
   asset_count: number
+  status?: 'draft' | 'in_progress' | 'completed' | 'failed'
+  job_statuses?: {
+    queued: number
+    processing: number
+    succeeded: number
+    failed: number
+  }
 }
 
 export type ProjectAsset = {

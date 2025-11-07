@@ -1,0 +1,6 @@
+# Supabase Environment Variables for Railway API Service
+# Add these to Railway → API Service → Variables → Raw Editor
+
+SUPABASE_URL=https://rdzanmwdqmidwifviwyr.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJkemFubXdkcW1pZHdpZnZpd3lyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxMTk0NDcsImV4cCI6MjA3MDY5NTQ0N30.ix-n98y0cX0O75lqu4lavnJYqnD8Y5PkRm8DDV0oDMA
+SUPABASE_JWKS_URL=https://rdzanmwdqmidwifviwyr.supabase.co/auth/v1/.well-known/jwks.json

@@ -1,0 +1,10 @@
+# Supabase Connection Pooler URL for Railway
+# Use this instead of the direct connection
+
+postgresql://postgres.rdzanmwdqmidwifviwyr:1wGI6pxa]~1B@aws-1-us-west-1.pooler.supabase.com:6543/postgres
+
+# Key differences from direct connection:
+# - Uses pooler.supabase.com (better for Railway/serverless)
+# - Port 6543 (not 5432)
+# - Handles connection limits automatically
+# - Works with IPv4/IPv6 routing issues

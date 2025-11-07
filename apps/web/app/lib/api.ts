@@ -90,7 +90,7 @@ export const shootsApi = {
   get: (id: string): Promise<Shoot> => 
     apiRequest(`/shoots/${id}`),
 
-  list: (): Promise<Shoot[]> => 
+  list: (): Promise<{ shoots: Shoot[] }> =>
     apiRequest('/shoots'),
 
   delete: (id: string): Promise<void> => 
