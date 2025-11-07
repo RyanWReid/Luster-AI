@@ -13,6 +13,17 @@ from sqlalchemy.orm import relationship, sessionmaker
 load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Debug: Print DATABASE_URL (will help us see what's happening in Railway logs)
+if DATABASE_URL:
+    print(f"DATABASE_URL loaded: {DATABASE_URL[:50]}...")  # Print first 50 chars
+else:
+    print("ERROR: DATABASE_URL is not set!")
+    raise ValueError("DATABASE_URL environment variable is required")
+
+# Strip any whitespace that might have been accidentally added
+DATABASE_URL = DATABASE_URL.strip() if DATABASE_URL else None
+
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
