@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { Session, User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { Alert } from 'react-native'
+import { Alert, Linking } from 'react-native'
 
 type AuthContextType = {
   user: User | null
@@ -19,60 +19,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
       setLoading(false)
     })
 
+    // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session)
         setUser(session?.user ?? null)
+
+        // Show success message on sign in
+        if (event === 'SIGNED_IN') {
+          Alert.alert('Success', 'You are now signed in!')
+        }
       }
     )
 
+    // Handle deep links for magic link authentication
+    const handleDeepLink = ({ url }: { url: string }) => {
+      if (url && url.includes('#')) {
+        // Extract the hash fragment (contains token info)
+        const hashFragment = url.split('#')[1]
+
+        // Parse the hash fragment as query params
+        const params = new URLSearchParams(hashFragment)
+        const accessToken = params.get('access_token')
+        const refreshToken = params.get('refresh_token')
+
+        if (accessToken) {
+          // Set the session with the tokens from the deep link
+          supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken || '',
+          })
+        }
+      }
+    }
+
+    // Add deep link listener
+    const linkingSubscription = Linking.addEventListener('url', handleDeepLink)
+
+    // Check for initial URL (if app was closed and opened via deep link)
+    Linking.getInitialURL().then((url) => {
+      if (url) {
+        handleDeepLink({ url })
+      }
+    })
+
     return () => {
       authListener.subscription.unsubscribe()
+      linkingSubscription.remove()
     }
   }, [])
 
   const signInWithEmail = async (email: string) => {
     try {
-      // BYPASS AUTH FOR DEVELOPMENT
-      // Create a mock user session
-      const mockUser = {
-        id: 'mock-user-id',
+      const { error } = await supabase.auth.signInWithOtp({
         email: email,
-        app_metadata: {},
-        user_metadata: {},
-        aud: 'authenticated',
-        created_at: new Date().toISOString(),
-      } as User
-      
-      const mockSession = {
-        access_token: 'mock-access-token',
-        token_type: 'bearer',
-        expires_in: 3600,
-        refresh_token: 'mock-refresh-token',
-        user: mockUser,
-      } as Session
-      
-      // Set the mock session
-      setUser(mockUser)
-      setSession(mockSession)
-      
-      Alert.alert('Success', 'Logged in successfully! (Development mode)')
-      
-      // Original Supabase code (commented out for bypass)
-      // const { error } = await supabase.auth.signInWithOtp({
-      //   email: email,
-      //   options: {
-      //     emailRedirectTo: 'lusterai://auth',
-      //   },
-      // })
-      // if (error) throw error
-      // Alert.alert('Success', 'Check your email for the login link!')
+        options: {
+          emailRedirectTo: 'lusterai://auth',
+        },
+      })
+      if (error) throw error
+      Alert.alert('Success', 'Check your email for the login link!')
     } catch (error: any) {
       Alert.alert('Error', error.message)
     }
@@ -80,15 +93,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      // BYPASS AUTH FOR DEVELOPMENT
-      // Simply clear the mock session
-      setUser(null)
-      setSession(null)
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
       Alert.alert('Success', 'Signed out successfully!')
-      
-      // Original Supabase code (commented out for bypass)
-      // const { error } = await supabase.auth.signOut()
-      // if (error) throw error
     } catch (error: any) {
       Alert.alert('Error', error.message)
     }
