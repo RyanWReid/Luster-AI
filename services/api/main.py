@@ -32,6 +32,15 @@ from logger import (LoggingMiddleware, log_credit_transaction,
 from admin import router as admin_router
 from revenue_cat import router as revenuecat_router
 
+# Import R2 client for presigned URLs
+try:
+    from s3_client import r2_client
+    R2_ENABLED = True
+    logger.info("R2 client initialized successfully")
+except Exception as e:
+    R2_ENABLED = False
+    logger.warning(f"R2 client not available: {e}")
+
 load_dotenv()
 
 # Initialize Sentry
@@ -142,7 +151,196 @@ def health_check():
         health_status["services"]["database"] = f"unhealthy: {str(e)}"
         health_status["status"] = "degraded"
 
+    # Check R2 storage
+    health_status["services"]["r2_storage"] = "enabled" if R2_ENABLED else "disabled"
+
     return health_status
+
+
+# ============================================================================
+# R2 Presigned URL Endpoints
+# ============================================================================
+
+class PresignedUploadRequest(BaseModel):
+    shoot_id: str
+    filename: str
+    content_type: str = "image/jpeg"
+    max_file_size: int = 10 * 1024 * 1024  # 10MB default
+
+
+@app.post("/uploads/presign")
+def generate_presigned_upload(
+    request: PresignedUploadRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Generate presigned POST URL for direct client uploads to R2
+
+    This allows mobile/web clients to upload directly to R2 without
+    going through the API server, which is more efficient and scalable.
+    """
+    if not R2_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="R2 storage not configured. Please set R2 environment variables."
+        )
+
+    # Validate shoot exists
+    shoot = db.query(Shoot).filter(Shoot.id == request.shoot_id).first()
+    if not shoot:
+        raise HTTPException(status_code=404, detail="Shoot not found")
+
+    # Generate unique asset ID and object key
+    asset_id = str(uuid.uuid4())
+    file_ext = os.path.splitext(request.filename)[1] or ".jpg"
+
+    # R2 object key format: /{userId}/{shootId}/{assetId}/original{ext}
+    object_key = f"{DEFAULT_USER_ID}/{request.shoot_id}/{asset_id}/original{file_ext}"
+
+    try:
+        # Generate presigned POST URL
+        presigned_data = r2_client.generate_presigned_upload_url(
+            object_key=object_key,
+            content_type=request.content_type,
+            expiration=3600,  # 1 hour
+            max_file_size=request.max_file_size,
+        )
+
+        logger.info(f"Generated presigned upload URL for shoot {request.shoot_id}")
+
+        return {
+            "asset_id": asset_id,
+            "object_key": object_key,
+            "upload_url": presigned_data["url"],
+            "upload_fields": presigned_data["fields"],
+            "expires_in": 3600,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to generate presigned upload URL: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate upload URL: {str(e)}"
+        )
+
+
+class ConfirmUploadRequest(BaseModel):
+    asset_id: str
+    shoot_id: str
+    object_key: str
+    filename: str
+    file_size: int
+    content_type: str = "image/jpeg"
+
+
+@app.post("/uploads/confirm")
+def confirm_upload(
+    request: ConfirmUploadRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Confirm that a file was uploaded to R2 and create the asset record
+
+    After the client uploads directly to R2 using a presigned URL,
+    they call this endpoint to register the asset in the database.
+    """
+    if not R2_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="R2 storage not configured"
+        )
+
+    # Validate shoot exists
+    shoot = db.query(Shoot).filter(Shoot.id == request.shoot_id).first()
+    if not shoot:
+        raise HTTPException(status_code=404, detail="Shoot not found")
+
+    # Verify the file exists in R2
+    try:
+        if not r2_client.check_file_exists(request.object_key):
+            raise HTTPException(
+                status_code=400,
+                detail="File not found in storage. Upload may have failed."
+            )
+    except Exception as e:
+        logger.error(f"Failed to verify file in R2: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to verify upload: {str(e)}"
+        )
+
+    # Create asset record
+    asset = Asset(
+        id=request.asset_id,  # Use the pre-generated asset ID
+        shoot_id=request.shoot_id,
+        user_id=DEFAULT_USER_ID,
+        original_filename=request.filename,
+        file_path=request.object_key,  # Store R2 object key in file_path
+        file_size=request.file_size,
+        mime_type=request.content_type,
+    )
+    db.add(asset)
+    db.commit()
+    db.refresh(asset)
+
+    logger.info(f"Asset {asset.id} confirmed and registered")
+
+    return {
+        "id": str(asset.id),
+        "filename": asset.original_filename,
+        "size": asset.file_size,
+        "object_key": request.object_key,
+    }
+
+
+@app.get("/shoots")
+def list_shoots(db: Session = Depends(get_db)):
+    """List all shoots for the user with job status aggregation"""
+
+    # Query all shoots for the user with related assets and jobs
+    shoots = db.query(Shoot).filter(Shoot.user_id == DEFAULT_USER_ID).all()
+
+    result = []
+    for shoot in shoots:
+        # Count total assets
+        asset_count = len(shoot.assets)
+
+        # Aggregate job statuses across all assets
+        job_statuses = {
+            "queued": 0,
+            "processing": 0,
+            "succeeded": 0,
+            "failed": 0,
+        }
+
+        for asset in shoot.assets:
+            for job in asset.jobs:
+                job_statuses[job.status.value] += 1
+
+        # Determine overall project status
+        if job_statuses["queued"] > 0 or job_statuses["processing"] > 0:
+            project_status = "in_progress"
+        elif job_statuses["succeeded"] > 0:
+            project_status = "completed"
+        elif job_statuses["failed"] > 0:
+            project_status = "failed"
+        else:
+            project_status = "draft"  # No jobs yet
+
+        result.append({
+            "id": str(shoot.id),
+            "name": shoot.name,
+            "created_at": shoot.created_at.isoformat(),
+            "updated_at": shoot.updated_at.isoformat(),
+            "asset_count": asset_count,
+            "job_statuses": job_statuses,
+            "status": project_status,
+        })
+
+    # Sort by updated_at descending (most recent first)
+    result.sort(key=lambda x: x["updated_at"], reverse=True)
+
+    return {"shoots": result}
 
 
 @app.post("/shoots")
@@ -333,7 +531,7 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
 
 @app.get("/shoots/{shoot_id}/assets")
 def get_shoot_assets(shoot_id: str, db: Session = Depends(get_db)):
-    """Get all assets in a shoot"""
+    """Get all assets in a shoot with presigned download URLs"""
 
     shoot = db.query(Shoot).filter(Shoot.id == shoot_id).first()
     if not shoot:
@@ -341,38 +539,65 @@ def get_shoot_assets(shoot_id: str, db: Session = Depends(get_db)):
 
     assets = db.query(Asset).filter(Asset.shoot_id == shoot_id).all()
 
+    asset_list = []
+    for asset in assets:
+        # Generate presigned URL for original file if R2 is enabled
+        if R2_ENABLED:
+            try:
+                upload_url = r2_client.generate_presigned_download_url(
+                    object_key=asset.file_path,
+                    expiration=3600,
+                    filename=asset.original_filename,
+                )
+            except Exception as e:
+                logger.error(f"Failed to generate presigned URL for asset {asset.id}: {e}")
+                upload_url = f"/uploads/{os.path.basename(asset.file_path)}"
+        else:
+            upload_url = f"/uploads/{os.path.basename(asset.file_path)}"
+
+        # Build job list with presigned URLs for outputs
+        job_list = []
+        for job in asset.jobs:
+            job_data = {
+                "id": str(job.id),
+                "status": job.status.value,
+                "prompt": job.prompt,
+                "error_message": job.error_message,
+                "created_at": job.created_at.isoformat() if job.created_at else None,
+                "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+                "credits_used": job.credits_used,
+            }
+
+            # Generate presigned URL for output if available
+            if job.output_path:
+                if R2_ENABLED:
+                    try:
+                        job_data["output_url"] = r2_client.generate_presigned_download_url(
+                            object_key=job.output_path,
+                            expiration=3600,
+                            filename=f"enhanced_{asset.original_filename}",
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to generate presigned URL for job {job.id}: {e}")
+                        job_data["output_url"] = f"/outputs/{os.path.basename(job.output_path)}"
+                else:
+                    job_data["output_url"] = f"/outputs/{os.path.basename(job.output_path)}"
+            else:
+                job_data["output_url"] = None
+
+            job_list.append(job_data)
+
+        asset_list.append({
+            "id": str(asset.id),
+            "filename": asset.original_filename,
+            "size": asset.file_size,
+            "upload_url": upload_url,
+            "jobs": job_list,
+        })
+
     return {
         "shoot": {"id": str(shoot.id), "name": shoot.name},
-        "assets": [
-            {
-                "id": str(asset.id),
-                "filename": asset.original_filename,
-                "size": asset.file_size,
-                "upload_url": f"/uploads/{os.path.basename(asset.file_path)}",
-                "jobs": [
-                    {
-                        "id": str(job.id),
-                        "status": job.status.value,
-                        "prompt": job.prompt,
-                        "output_url": (
-                            f"/outputs/{os.path.basename(job.output_path)}"
-                            if job.output_path
-                            else None
-                        ),
-                        "error_message": job.error_message,
-                        "created_at": (
-                            job.created_at.isoformat() if job.created_at else None
-                        ),
-                        "updated_at": (
-                            job.updated_at.isoformat() if job.updated_at else None
-                        ),
-                        "credits_used": job.credits_used,
-                    }
-                    for job in asset.jobs
-                ],
-            }
-            for asset in assets
-        ],
+        "assets": asset_list,
     }
 
 
