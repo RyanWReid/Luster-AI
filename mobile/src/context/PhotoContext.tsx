@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react'
 import enhancementService from '../services/enhancementService'
+import { useAuth } from './AuthContext'
 
 interface PhotoContextType {
   selectedPhotos: string[]
@@ -20,6 +21,7 @@ export function PhotoProvider({ children }: { children: ReactNode }) {
   const [enhancedPhotos, setEnhancedPhotos] = useState<string[]>([])
   const [creditBalance, setCreditBalance] = useState<number>(0)
   const [isLoadingCredits, setIsLoadingCredits] = useState(false)
+  const { user, loading: authLoading } = useAuth()
 
   const clearPhotos = () => {
     setSelectedPhotos([])
@@ -27,6 +29,12 @@ export function PhotoProvider({ children }: { children: ReactNode }) {
   }
 
   const refreshCredits = async () => {
+    // Only fetch credits if user is authenticated
+    if (!user) {
+      setCreditBalance(0)
+      return
+    }
+
     setIsLoadingCredits(true)
     try {
       const balance = await enhancementService.getCreditBalance()
@@ -41,10 +49,15 @@ export function PhotoProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  // Load credits on mount
+  // Load credits only when user is authenticated
   useEffect(() => {
-    refreshCredits()
-  }, [])
+    if (!authLoading && user) {
+      refreshCredits()
+    } else if (!user) {
+      // Clear credits when user logs out
+      setCreditBalance(0)
+    }
+  }, [user, authLoading])
 
   return (
     <PhotoContext.Provider value={{ 

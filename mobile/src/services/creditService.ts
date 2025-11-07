@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { supabase } from '../lib/supabase'
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -23,17 +24,19 @@ class CreditService {
    */
   async getCreditBalance(userId?: string): Promise<number> {
     try {
-      const token = await AsyncStorage.getItem('authToken')
-      
+      // Get Supabase session token
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       }
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`
       }
-      
+
       const response = await fetch(`${API_BASE_URL}/api/mobile/credits/balance`, {
         method: 'GET',
         headers,
@@ -66,17 +69,19 @@ class CreditService {
    */
   async getCreditHistory(limit: number = 20): Promise<CreditTransactionResponse[]> {
     try {
-      const token = await AsyncStorage.getItem('authToken')
-      
+      // Get Supabase session token
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       }
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`
       }
-      
+
       const response = await fetch(`${API_BASE_URL}/api/mobile/credits/history?limit=${limit}`, {
         method: 'GET',
         headers,
@@ -100,17 +105,19 @@ class CreditService {
    */
   async deductCredits(amount: number, reason: string): Promise<boolean> {
     try {
-      const token = await AsyncStorage.getItem('authToken')
-      
+      // Get Supabase session token
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       }
-      
+
       if (token) {
         headers['Authorization'] = `Bearer ${token}`
       }
-      
+
       const response = await fetch(`${API_BASE_URL}/api/mobile/credits/deduct`, {
         method: 'POST',
         headers,
