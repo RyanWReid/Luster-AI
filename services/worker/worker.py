@@ -138,24 +138,22 @@ class Worker:
             print(f"  - Storage type: {'R2' if self.is_r2_path(asset.file_path) else 'Local'}")
 
             # Get local file path (downloads from R2 if needed)
-            input_file_path = None
-            try:
-                input_file_path = self.get_local_file_path(asset.file_path)
+            input_file_path = self.get_local_file_path(asset.file_path)
 
-                # Validate input file exists
-                if not os.path.exists(input_file_path):
-                    raise Exception(f"Input file not found: {input_file_path}")
+            # Validate input file exists
+            if not os.path.exists(input_file_path):
+                raise Exception(f"Input file not found: {input_file_path}")
 
-                # Get file info
-                file_stat = os.stat(input_file_path)
-                print(f"File system details:")
-                print(f"  - Local path: {input_file_path}")
-                print(f"  - File exists: {os.path.exists(input_file_path)}")
-                print(f"  - File size on disk: {file_stat.st_size} bytes")
-                print(f"  - File permissions: {oct(file_stat.st_mode)[-3:]}")
-                print(f"  - Is file: {os.path.isfile(input_file_path)}")
-                print(f"  - Is readable: {os.access(input_file_path, os.R_OK)}")
-            
+            # Get file info
+            file_stat = os.stat(input_file_path)
+            print(f"File system details:")
+            print(f"  - Local path: {input_file_path}")
+            print(f"  - File exists: {os.path.exists(input_file_path)}")
+            print(f"  - File size on disk: {file_stat.st_size} bytes")
+            print(f"  - File permissions: {oct(file_stat.st_mode)[-3:]}")
+            print(f"  - Is file: {os.path.isfile(input_file_path)}")
+            print(f"  - Is readable: {os.access(input_file_path, os.R_OK)}")
+
             # Extract tier and style information from prompt_params
             tier = "premium"  # default
             style_preset = "default"  # default
@@ -256,28 +254,28 @@ class Worker:
                 error_detail = result.get("error", "Image processing failed")
                 raise Exception(error_detail)
 
-        finally:
-            # Clean up temp files
-            if input_file_path and input_file_path != asset.file_path:
-                self.cleanup_temp_file(input_file_path)
-            if 'temp_output_path' in locals() and os.path.exists(temp_output_path):
-                self.cleanup_temp_file(temp_output_path)
-                
         except Exception as e:
             error_msg = str(e)
             print(f"Job {job.id} failed: {error_msg}")
-            
+
             # Update job as failed
             job.status = JobStatus.failed
             job.error_message = error_msg
             job.completed_at = datetime.utcnow()
             self.db.commit()
-            
+
             # Add failure event
             self.add_job_event(job.id, "failed", {
                 "error_message": error_msg,
                 "completed_at": job.completed_at.isoformat()
             })
+
+        finally:
+            # Clean up temp files
+            if 'input_file_path' in locals() and input_file_path and input_file_path != asset.file_path:
+                self.cleanup_temp_file(input_file_path)
+            if 'temp_output_path' in locals() and os.path.exists(temp_output_path):
+                self.cleanup_temp_file(temp_output_path)
     
     def add_job_event(self, job_id: str, event_type: str, details: dict):
         """Add a job event to the audit trail"""
