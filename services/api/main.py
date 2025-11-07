@@ -31,6 +31,8 @@ from logger import (LoggingMiddleware, log_credit_transaction,
                     log_upload_started, logger)
 from admin import router as admin_router
 from revenue_cat import router as revenuecat_router
+from auth import get_current_user, get_optional_user
+from auth_endpoints import router as auth_router
 
 # Import R2 client for presigned URLs
 try:
@@ -66,11 +68,10 @@ else:
 
 app = FastAPI(title="Luster AI API", version="1.0.0")
 
-# Include admin monitoring router
-app.include_router(admin_router)
-
-# Include RevenueCat webhook router
-app.include_router(revenuecat_router)
+# Include routers
+app.include_router(auth_router)  # Authentication endpoints
+app.include_router(admin_router)  # Admin monitoring
+app.include_router(revenuecat_router)  # RevenueCat webhooks
 
 # Add structured logging middleware
 app.add_middleware(LoggingMiddleware)
@@ -172,6 +173,7 @@ class PresignedUploadRequest(BaseModel):
 def generate_presigned_upload(
     request: PresignedUploadRequest,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
     Generate presigned POST URL for direct client uploads to R2
@@ -185,8 +187,11 @@ def generate_presigned_upload(
             detail="R2 storage not configured. Please set R2 environment variables."
         )
 
-    # Validate shoot exists
-    shoot = db.query(Shoot).filter(Shoot.id == request.shoot_id).first()
+    # Validate shoot exists and belongs to user
+    shoot = db.query(Shoot).filter(
+        Shoot.id == request.shoot_id,
+        Shoot.user_id == user.id
+    ).first()
     if not shoot:
         raise HTTPException(status_code=404, detail="Shoot not found")
 
@@ -195,7 +200,7 @@ def generate_presigned_upload(
     file_ext = os.path.splitext(request.filename)[1] or ".jpg"
 
     # R2 object key format: /{userId}/{shootId}/{assetId}/original{ext}
-    object_key = f"{DEFAULT_USER_ID}/{request.shoot_id}/{asset_id}/original{file_ext}"
+    object_key = f"{user.id}/{request.shoot_id}/{asset_id}/original{file_ext}"
 
     try:
         # Generate presigned POST URL
@@ -237,6 +242,7 @@ class ConfirmUploadRequest(BaseModel):
 def confirm_upload(
     request: ConfirmUploadRequest,
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """
     Confirm that a file was uploaded to R2 and create the asset record
@@ -250,8 +256,11 @@ def confirm_upload(
             detail="R2 storage not configured"
         )
 
-    # Validate shoot exists
-    shoot = db.query(Shoot).filter(Shoot.id == request.shoot_id).first()
+    # Validate shoot exists and belongs to user
+    shoot = db.query(Shoot).filter(
+        Shoot.id == request.shoot_id,
+        Shoot.user_id == user.id
+    ).first()
     if not shoot:
         raise HTTPException(status_code=404, detail="Shoot not found")
 
@@ -273,7 +282,7 @@ def confirm_upload(
     asset = Asset(
         id=request.asset_id,  # Use the pre-generated asset ID
         shoot_id=request.shoot_id,
-        user_id=DEFAULT_USER_ID,
+        user_id=user.id,
         original_filename=request.filename,
         file_path=request.object_key,  # Store R2 object key in file_path
         file_size=request.file_size,
@@ -294,11 +303,14 @@ def confirm_upload(
 
 
 @app.get("/shoots")
-def list_shoots(db: Session = Depends(get_db)):
+def list_shoots(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """List all shoots for the user with job status aggregation"""
 
     # Query all shoots for the user with related assets and jobs
-    shoots = db.query(Shoot).filter(Shoot.user_id == DEFAULT_USER_ID).all()
+    shoots = db.query(Shoot).filter(Shoot.user_id == user.id).all()
 
     result = []
     for shoot in shoots:
@@ -344,9 +356,13 @@ def list_shoots(db: Session = Depends(get_db)):
 
 
 @app.post("/shoots")
-def create_shoot(name: str = Form(...), db: Session = Depends(get_db)):
+def create_shoot(
+    name: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Create a new photo shoot"""
-    shoot = Shoot(user_id=DEFAULT_USER_ID, name=name)
+    shoot = Shoot(user_id=user.id, name=name)
     db.add(shoot)
     db.commit()
     db.refresh(shoot)
@@ -358,6 +374,7 @@ async def upload_file(
     shoot_id: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Upload a file to a shoot"""
 
@@ -367,8 +384,11 @@ async def upload_file(
     print(f"Content type: {file.content_type}")
     print(f"File size attribute: {getattr(file, 'size', 'Not available')}")
 
-    # Validate shoot exists
-    shoot = db.query(Shoot).filter(Shoot.id == shoot_id).first()
+    # Validate shoot exists and belongs to user
+    shoot = db.query(Shoot).filter(
+        Shoot.id == shoot_id,
+        Shoot.user_id == user.id
+    ).first()
     if not shoot:
         raise HTTPException(status_code=404, detail="Shoot not found")
 
@@ -398,7 +418,7 @@ async def upload_file(
     # Create asset record
     asset = Asset(
         shoot_id=shoot_id,
-        user_id=DEFAULT_USER_ID,
+        user_id=user.id,
         original_filename=file.filename or "unknown",
         file_path=file_path,
         file_size=file_size,
@@ -423,16 +443,20 @@ def create_job(
     prompt: str = Form(...),
     tier: str = Form("premium"),
     db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     """Create a new processing job"""
 
-    # Validate asset exists
-    asset = db.query(Asset).filter(Asset.id == asset_id).first()
+    # Validate asset exists and belongs to user
+    asset = db.query(Asset).filter(
+        Asset.id == asset_id,
+        Asset.user_id == user.id
+    ).first()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
     # Check user credits
-    credit = db.query(Credit).filter(Credit.user_id == DEFAULT_USER_ID).first()
+    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
     if not credit or credit.balance < 1:
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
@@ -446,7 +470,7 @@ def create_job(
     # Create job in database
     job = Job(
         asset_id=asset_id,
-        user_id=DEFAULT_USER_ID,
+        user_id=user.id,
         prompt=prompt,
         status=JobStatus.queued,
         credits_used=credits_used,
@@ -500,10 +524,17 @@ def create_job(
 
 
 @app.get("/jobs/{job_id}")
-def get_job(job_id: str, db: Session = Depends(get_db)):
+def get_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Get job status and details"""
 
-    job = db.query(Job).filter(Job.id == job_id).first()
+    job = db.query(Job).filter(
+        Job.id == job_id,
+        Job.user_id == user.id
+    ).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -530,10 +561,17 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/shoots/{shoot_id}/assets")
-def get_shoot_assets(shoot_id: str, db: Session = Depends(get_db)):
+def get_shoot_assets(
+    shoot_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Get all assets in a shoot with presigned download URLs"""
 
-    shoot = db.query(Shoot).filter(Shoot.id == shoot_id).first()
+    shoot = db.query(Shoot).filter(
+        Shoot.id == shoot_id,
+        Shoot.user_id == user.id
+    ).first()
     if not shoot:
         raise HTTPException(status_code=404, detail="Shoot not found")
 
@@ -620,9 +658,12 @@ def serve_output(filename: str):
 
 
 @app.get("/credits")
-def get_credits(db: Session = Depends(get_db)):
+def get_credits(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     """Get user credit balance"""
-    credit = db.query(Credit).filter(Credit.user_id == DEFAULT_USER_ID).first()
+    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
     return {"balance": credit.balance if credit else 0}
 
 
@@ -638,21 +679,24 @@ async def mobile_enhance(
     image: UploadFile = File(...),
     style: str = Form("luster"),
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Mobile endpoint to start image enhancement"""
-    
+
     print(f"\n=== MOBILE ENHANCE DEBUG ===")
     print(f"Style: {style}")
     print(f"File: {image.filename}")
     print(f"Content type: {image.content_type}")
-    
-    # Get or create mobile shoot
-    user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
+
+    # Use authenticated user or fall back to default for development
     if not user:
-        # Create default user if not exists
-        user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
-        db.add(user)
-        db.commit()
+        logger.warning("Mobile enhance called without authentication, using DEFAULT_USER_ID")
+        user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
+        if not user:
+            # Create default user if not exists
+            user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
+            db.add(user)
+            db.commit()
     
     mobile_shoot = db.query(Shoot).filter(
         Shoot.user_id == user.id,
@@ -771,26 +815,29 @@ async def mobile_enhance(
 async def mobile_enhance_base64(
     request: Base64ImageRequest,
     db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
 ):
     """Mobile endpoint to enhance image from base64 data"""
-    
+
     print(f"\n=== MOBILE ENHANCE BASE64 DEBUG ===")
     print(f"Style: {request.style}")
     print(f"Image data length: {len(request.image)} chars")
-    
+
     # Decode base64 image
     try:
         image_data = base64.b64decode(request.image)
         print(f"Decoded image size: {len(image_data)} bytes")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
-    
-    # Get or create mobile shoot
-    user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
+
+    # Use authenticated user or fall back to default for development
     if not user:
-        user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
-        db.add(user)
-        db.commit()
+        logger.warning("Mobile enhance-base64 called without authentication, using DEFAULT_USER_ID")
+        user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
+        if not user:
+            user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
+            db.add(user)
+            db.commit()
     
     mobile_shoot = db.query(Shoot).filter(
         Shoot.user_id == user.id,
@@ -885,12 +932,22 @@ async def mobile_enhance_base64(
 
 
 @app.get("/api/mobile/enhance/{job_id}/status")
-def mobile_job_status(job_id: str, db: Session = Depends(get_db)):
+def mobile_job_status(
+    job_id: str,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+):
     """Get status of mobile enhancement job"""
-    
+
+    # Allow unauthenticated access for backward compatibility
+    # but if authenticated, verify ownership
     job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
+    # If authenticated, verify ownership
+    if user and job.user_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
     
     result = {
         "job_id": str(job.id),
@@ -916,14 +973,19 @@ def mobile_job_status(job_id: str, db: Session = Depends(get_db)):
 
 
 @app.get("/api/mobile/credits")
-def mobile_get_credits(db: Session = Depends(get_db)):
+def mobile_get_credits(
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+):
     """Get user credit balance for mobile"""
-    # Get or create user
-    user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
+    # Use authenticated user or fall back to default for development
     if not user:
-        user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
-        db.add(user)
-        db.flush()
+        logger.warning("Mobile credits called without authentication, using DEFAULT_USER_ID")
+        user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
+        if not user:
+            user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
+            db.add(user)
+            db.flush()
 
     # Get or create credits
     credit = db.query(Credit).filter(Credit.user_id == user.id).first()

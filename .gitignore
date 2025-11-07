@@ -61,3 +61,4 @@ temp/
 
 # MCP servers (exclude figma)
 mcp-servers/figma-mcp/OpenAI/
+services/api/.env.production
