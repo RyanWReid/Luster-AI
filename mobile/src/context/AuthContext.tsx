@@ -9,6 +9,7 @@ type AuthContextType = {
   loading: boolean
   signInWithEmail: (email: string) => Promise<void>
   signOut: () => Promise<void>
+  bypassLogin: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -101,8 +102,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // TEMPORARY: Bypass login for testing
+  const bypassLogin = () => {
+    const mockUser = {
+      id: 'test-user-123',
+      email: 'test@luster.ai',
+      app_metadata: {},
+      user_metadata: {},
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    } as User
+
+    const mockSession = {
+      access_token: 'mock-token',
+      refresh_token: 'mock-refresh',
+      expires_in: 3600,
+      token_type: 'bearer',
+      user: mockUser,
+    } as Session
+
+    setUser(mockUser)
+    setSession(mockSession)
+    console.log('🔓 Bypassed login - using mock user for testing')
+  }
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithEmail, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signInWithEmail, signOut, bypassLogin }}>
       {children}
     </AuthContext.Provider>
   )

@@ -118,7 +118,7 @@ export default function AuthScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { signInWithEmail } = useAuth()
+  const { signInWithEmail, bypassLogin } = useAuth()
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -187,17 +187,19 @@ export default function AuthScreen() {
   }, [])
 
   const handleRegister = async () => {
-    if (!fullName || !email || !password || !confirmPassword || !agreedToTerms) {
-      return
-    }
-    if (password !== confirmPassword) {
-      return
-    }
-    
-    setLoading(true)
-    // For now, just use the existing signInWithEmail method
-    await signInWithEmail(email)
-    setLoading(false)
+    // TEMPORARY: Bypass authentication for testing
+    bypassLogin()
+
+    // Original authentication code (commented out for testing):
+    // if (!fullName || !email || !password || !confirmPassword || !agreedToTerms) {
+    //   return
+    // }
+    // if (password !== confirmPassword) {
+    //   return
+    // }
+    // setLoading(true)
+    // await signInWithEmail(email)
+    // setLoading(false)
   }
 
   const handleSocialLogin = (provider: string) => {
@@ -423,7 +425,7 @@ export default function AuthScreen() {
                   <TouchableOpacity
                     style={[styles.registerButton, loading && styles.buttonDisabled]}
                     onPress={handleRegister}
-                    disabled={loading || !fullName || !email || !password || !confirmPassword || !agreedToTerms}
+                    disabled={loading}
                   >
                     <LinearGradient
                       colors={['#D4AF37', '#B8860B']}
