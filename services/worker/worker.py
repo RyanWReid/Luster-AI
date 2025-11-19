@@ -101,14 +101,25 @@ class Worker:
     def poll_jobs(self):
         """Poll database for queued jobs"""
         try:
+            # Refresh session to see new data
+            self.db.expire_all()
+
             # Use SELECT FOR UPDATE SKIP LOCKED for job queuing
             job = self.db.query(Job).filter(
                 Job.status == JobStatus.queued
             ).with_for_update(skip_locked=True).first()
 
+            if job:
+                print(f"Found queued job: {job.id}")
+
             return job
         except Exception as e:
             print(f"Error polling jobs: {e}")
+            # Try to recover the session
+            try:
+                self.db.rollback()
+            except:
+                pass
             return None
     
     def process_job(self, job: Job):
