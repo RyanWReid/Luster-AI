@@ -140,12 +140,25 @@ def verify_jwt_token(token: str) -> Dict:
     Raises:
         AuthenticationError: If token is invalid
     """
+    global _jwks_cache, _jwks_cache_time
+
     try:
         # Fetch JWKS
         jwks = get_jwks()
 
         # Get public key for this token
-        public_key = get_public_key_from_jwks(token, jwks)
+        try:
+            public_key = get_public_key_from_jwks(token, jwks)
+        except AuthenticationError as e:
+            # If kid not found, force refresh JWKS cache and retry once
+            if "Public key not found for kid" in str(e):
+                logger.info("Kid not found in cache, forcing JWKS refresh")
+                _jwks_cache = None
+                _jwks_cache_time = 0
+                jwks = get_jwks()
+                public_key = get_public_key_from_jwks(token, jwks)
+            else:
+                raise
 
         # Verify and decode token
         payload = jwt.decode(
