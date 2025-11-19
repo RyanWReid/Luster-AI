@@ -26,6 +26,7 @@ export default function HomeScreen() {
   const [selectedStyle, setSelectedStyle] = useState<string>('luster')
   const [processing, setProcessing] = useState(false)
   const [enhancedImageUrl, setEnhancedImageUrl] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Refresh credits when user is synced
   useEffect(() => {
@@ -85,6 +86,8 @@ export default function HomeScreen() {
 
     try {
       setProcessing(true)
+      setError(null)
+      setEnhancedImageUrl(null)
 
       // Start enhancement job - sends image to backend which processes and stores output in R2
       const enhanceResult = await enhancementService.enhanceImage({
@@ -101,16 +104,24 @@ export default function HomeScreen() {
       )
 
       if (jobResult.status === 'succeeded' && jobResult.enhanced_image_url) {
-        setEnhancedImageUrl(jobResult.enhanced_image_url)
+        // Convert relative URL to absolute URL
+        const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://luster-ai-production.up.railway.app'
+        const fullUrl = jobResult.enhanced_image_url.startsWith('http')
+          ? jobResult.enhanced_image_url
+          : `${API_BASE_URL}${jobResult.enhanced_image_url}`
+        console.log('Enhanced image URL:', fullUrl)
+        setEnhancedImageUrl(fullUrl)
         // Refresh credits after successful enhancement
         await refreshCredits()
         Alert.alert('Success', 'Your photo has been enhanced!')
       } else {
-        Alert.alert('Enhancement failed', jobResult.error || 'Unknown error')
+        // Refund should happen automatically on backend
+        await refreshCredits()
+        setError(jobResult.error || 'Enhancement failed')
       }
     } catch (error: any) {
       console.error('Enhancement error:', error)
-      Alert.alert('Error', error.message || 'Failed to enhance photo')
+      setError(error.message || 'Failed to enhance photo')
     } finally {
       setProcessing(false)
     }
@@ -162,6 +173,22 @@ export default function HomeScreen() {
               style={styles.resultImage}
               resizeMode="contain"
             />
+          </View>
+        )}
+
+        {error && (
+          <View style={styles.errorSection}>
+            <View style={styles.errorHeader}>
+              <Ionicons name="close-circle" size={32} color="#ef4444" />
+              <Text style={styles.errorTitle}>Enhancement Failed</Text>
+            </View>
+            <Text style={styles.errorMessage}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => setError(null)}
+            >
+              <Text style={styles.retryButtonText}>Dismiss</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -294,6 +321,41 @@ const styles = StyleSheet.create({
     height: 300,
     borderRadius: 12,
     backgroundColor: '#1a1a1a',
+  },
+  errorSection: {
+    padding: 16,
+    margin: 16,
+    backgroundColor: '#1a1a1a',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#ef4444',
+  },
+  errorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#ef4444',
+    marginLeft: 8,
+  },
+  errorMessage: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginBottom: 12,
+  },
+  retryButton: {
+    backgroundColor: '#2a2a2a',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  retryButtonText: {
+    color: '#ffffff',
+    fontWeight: '500',
   },
   stylesSection: {
     padding: 16,
