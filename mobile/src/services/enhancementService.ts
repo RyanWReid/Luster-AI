@@ -1,6 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import { supabase } from '../lib/supabase'
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
+
+/**
+ * Get auth token for API requests
+ */
+async function getAuthToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token || null
+}
 
 interface EnhanceImageParams {
   imageUrl: string
@@ -233,11 +242,19 @@ class EnhancementService {
       })
       
       console.log('Sending base64 request to:', `${API_BASE_URL}/api/mobile/enhance-base64`)
+
+      // Get auth token
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Not authenticated. Please sign in again.')
+      }
+
       const startTime = Date.now()
       const response = await fetch(`${API_BASE_URL}/api/mobile/enhance-base64`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(requestBody),
       })
