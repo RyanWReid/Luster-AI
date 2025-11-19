@@ -873,14 +873,34 @@ async def mobile_enhance_base64(
         os.rename(temp_path, file_path)
 
     file_size = os.path.getsize(file_path)
-    print(f"File saved: {file_path}, size: {file_size} bytes")
-    
+    print(f"File converted: {file_path}, size: {file_size} bytes")
+
+    # Upload to R2 so worker can access it (API and Worker run in separate containers)
+    if R2_ENABLED:
+        asset_id = str(uuid.uuid4())
+        r2_key = f"{user.id}/{mobile_shoot.id}/{asset_id}/original.jpg"
+        print(f"Uploading to R2: {r2_key}")
+        r2_client.upload_file(
+            file_path=file_path,
+            object_key=r2_key,
+            content_type="image/jpeg"
+        )
+        # Clean up local file after R2 upload
+        os.remove(file_path)
+        storage_path = r2_key  # Store R2 key, not local path
+        print(f"Uploaded to R2: {r2_key}")
+    else:
+        asset_id = str(uuid.uuid4())
+        storage_path = file_path  # Local path for development
+        print(f"R2 not enabled, using local path: {file_path}")
+
     # Create asset
     asset = Asset(
+        id=asset_id,
         shoot_id=mobile_shoot.id,
         user_id=user.id,
         original_filename="photo.jpg",
-        file_path=file_path,
+        file_path=storage_path,
         file_size=file_size,
         mime_type="image/jpeg",
     )
