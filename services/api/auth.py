@@ -24,13 +24,14 @@ load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
 SUPABASE_JWKS_URL = os.getenv("SUPABASE_JWKS_URL")
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 
 # If JWKS URL not set, construct from Supabase URL
 if not SUPABASE_JWKS_URL and SUPABASE_URL:
     SUPABASE_JWKS_URL = f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json"
 
-# JWT configuration
-JWT_ALGORITHM = "RS256"  # Supabase uses RS256
+# JWT configuration - use HS256 if JWT secret provided, otherwise RS256 with JWKS
+JWT_ALGORITHM = "HS256" if SUPABASE_JWT_SECRET else "RS256"
 JWT_AUDIENCE = "authenticated"  # Supabase default audience
 
 # Cache configuration
@@ -143,27 +144,31 @@ def verify_jwt_token(token: str) -> Dict:
     global _jwks_cache, _jwks_cache_time
 
     try:
-        # Fetch JWKS
-        jwks = get_jwks()
-
-        # Get public key for this token
-        try:
-            public_key = get_public_key_from_jwks(token, jwks)
-        except AuthenticationError as e:
-            # If kid not found, force refresh JWKS cache and retry once
-            if "Public key not found for kid" in str(e):
-                logger.info("Kid not found in cache, forcing JWKS refresh")
-                _jwks_cache = None
-                _jwks_cache_time = 0
-                jwks = get_jwks()
-                public_key = get_public_key_from_jwks(token, jwks)
-            else:
-                raise
+        # Determine verification key based on configuration
+        if SUPABASE_JWT_SECRET:
+            # Use symmetric HS256 verification with JWT secret
+            verification_key = SUPABASE_JWT_SECRET
+            logger.debug("Using HS256 with JWT secret for verification")
+        else:
+            # Use asymmetric RS256 verification with JWKS
+            jwks = get_jwks()
+            try:
+                verification_key = get_public_key_from_jwks(token, jwks)
+            except AuthenticationError as e:
+                # If kid not found, force refresh JWKS cache and retry once
+                if "Public key not found for kid" in str(e):
+                    logger.info("Kid not found in cache, forcing JWKS refresh")
+                    _jwks_cache = None
+                    _jwks_cache_time = 0
+                    jwks = get_jwks()
+                    verification_key = get_public_key_from_jwks(token, jwks)
+                else:
+                    raise
 
         # Verify and decode token
         payload = jwt.decode(
             token,
-            public_key,
+            verification_key,
             algorithms=[JWT_ALGORITHM],
             audience=JWT_AUDIENCE,
             options={
