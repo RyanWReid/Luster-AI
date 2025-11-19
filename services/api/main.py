@@ -770,10 +770,10 @@ async def mobile_enhance(
     # Check or create credits
     credit = db.query(Credit).filter(Credit.user_id == user.id).first()
     if not credit:
-        credit = Credit(user_id=user.id, balance=10)  # Give 10 free credits
+        credit = Credit(user_id=user.id, balance=0)
         db.add(credit)
         db.flush()
-    
+
     if credit.balance < 1:
         raise HTTPException(status_code=402, detail="Insufficient credits")
     
@@ -890,19 +890,23 @@ async def mobile_enhance_base64(
     # Check or create credits
     credit = db.query(Credit).filter(Credit.user_id == user.id).first()
     if not credit:
-        credit = Credit(user_id=user.id, balance=10)
+        credit = Credit(user_id=user.id, balance=0)
         db.add(credit)
         db.flush()
-    
+
     if credit.balance < 1:
         raise HTTPException(status_code=402, detail="Insufficient credits")
-    
+
+    # Deduct credits upfront (reservation) - will be refunded on failure
+    credit.balance -= 1
+    db.flush()
+
     # Create job
     style_prompts = {
         "luster": "Luster AI signature style - luxury editorial real estate photography with dramatic lighting",
         "flambient": "Bright, airy interior with crisp whites and flambient lighting technique"
     }
-    
+
     job = Job(
         asset_id=asset.id,
         user_id=user.id,
@@ -912,12 +916,12 @@ async def mobile_enhance_base64(
     )
     db.add(job)
     db.flush()
-    
+
     # Create job event
     event = JobEvent(
         job_id=job.id,
         event_type="created",
-        details=json.dumps({"source": "mobile_base64", "style": request.style}),
+        details=json.dumps({"source": "mobile_base64", "style": request.style, "credits_reserved": 1}),
     )
     db.add(event)
     db.commit()
@@ -990,7 +994,7 @@ def mobile_get_credits(
     # Get or create credits
     credit = db.query(Credit).filter(Credit.user_id == user.id).first()
     if not credit:
-        credit = Credit(user_id=user.id, balance=10)
+        credit = Credit(user_id=user.id, balance=0)
         db.add(credit)
         db.commit()
 
@@ -1039,15 +1043,9 @@ def sync_user(
     is_new = credit is None
 
     if not credit:
-        # Give new users 10 free credits
-        credit = Credit(user_id=user.id, balance=10)
+        # New users start with 0 credits - must purchase
+        credit = Credit(user_id=user.id, balance=0)
         db.add(credit)
-        db.commit()
-        db.refresh(credit)
-    elif credit.balance == 0:
-        # Give returning users with 0 credits a welcome back bonus
-        credit.balance = 10
-        is_new = True
         db.commit()
         db.refresh(credit)
 
@@ -1072,8 +1070,8 @@ def mobile_get_credits_balance(
     credit = db.query(Credit).filter(Credit.user_id == user.id).first()
 
     if not credit:
-        # Create credit record with welcome bonus
-        credit = Credit(user_id=user.id, balance=10)
+        # New users start with 0 credits - must purchase
+        credit = Credit(user_id=user.id, balance=0)
         db.add(credit)
         db.commit()
         db.refresh(credit)

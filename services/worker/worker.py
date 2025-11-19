@@ -227,11 +227,7 @@ class Worker:
                 job.output_path = final_output_path
                 job.completed_at = datetime.utcnow()
 
-                # Deduct credits
-                credit = self.db.query(Credit).filter(Credit.user_id == job.user_id).first()
-                if credit:
-                    credit.balance -= job.credits_used
-
+                # Credits already deducted at job creation (reservation system)
                 self.db.commit()
 
                 # Add success event with enhanced details
@@ -262,12 +258,20 @@ class Worker:
             job.status = JobStatus.failed
             job.error_message = error_msg
             job.completed_at = datetime.utcnow()
+
+            # Refund credits on failure (credits were reserved at job creation)
+            credit = self.db.query(Credit).filter(Credit.user_id == job.user_id).first()
+            if credit:
+                credit.balance += job.credits_used
+                print(f"Refunded {job.credits_used} credits to user {job.user_id}")
+
             self.db.commit()
 
             # Add failure event
             self.add_job_event(job.id, "failed", {
                 "error_message": error_msg,
-                "completed_at": job.completed_at.isoformat()
+                "completed_at": job.completed_at.isoformat(),
+                "credits_refunded": job.credits_used
             })
 
         finally:
