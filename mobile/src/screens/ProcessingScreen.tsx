@@ -261,18 +261,45 @@ export default function ProcessingScreen() {
           setCurrentStatus(`Enhancing photo ${i + 1} of ${photos.length}...`)
           setProcessedCount(i)
 
-          // Simulate queued state
-          setCurrentStatus(`Photo ${i + 1}: Queued...`)
-          await new Promise((resolve) => setTimeout(resolve, timePerPhoto * 0.2))
+          try {
+            // Call the actual enhancement API
+            setCurrentStatus(`Photo ${i + 1}: Uploading...`)
+            const enhanceResult = await enhancementService.enhanceImage({
+              imageUrl: photos[i],
+              style: style as 'luster' | 'flambient',
+            })
 
-          // Simulate processing state
-          setCurrentStatus(`Photo ${i + 1}: Enhancing with AI...`)
-          await new Promise((resolve) => setTimeout(resolve, timePerPhoto * 0.8))
+            // Poll for completion
+            setCurrentStatus(`Photo ${i + 1}: Enhancing with AI...`)
+            const jobResult = await enhancementService.pollJobStatus(
+              enhanceResult.job_id,
+              (status) => {
+                if (status === 'processing') {
+                  setCurrentStatus(`Photo ${i + 1}: Processing...`)
+                }
+              }
+            )
 
-          // Use original photo as "enhanced" output (no API call)
-          results.push(photos[i])
+            if (jobResult.status === 'succeeded' && jobResult.enhanced_image_url) {
+              // Convert relative URL to absolute URL
+              const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://luster-ai-production.up.railway.app'
+              const fullUrl = jobResult.enhanced_image_url.startsWith('http')
+                ? jobResult.enhanced_image_url
+                : `${API_BASE_URL}${jobResult.enhanced_image_url}`
+              results.push(fullUrl)
+              console.log(`Photo ${i + 1} enhanced successfully: ${fullUrl}`)
+            } else {
+              // Use original if enhancement failed
+              console.log(`Photo ${i + 1} enhancement failed, using original:`, jobResult.error)
+              results.push(photos[i])
+            }
+          } catch (error) {
+            console.error(`Photo ${i + 1} enhancement error:`, error)
+            // Use original if there's an error
+            results.push(photos[i])
+          }
+
           setProcessedCount(i + 1)
-          console.log(`Photo ${i + 1} "enhanced" (using original)`)
         }
 
         // Success haptic
