@@ -15,7 +15,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.mobile"
+      "bundleIdentifier": "com.lusterai.mobile",
+      "associatedDomains": [
+        "applinks:rdzanmwdqmidwifviwyr.supabase.co"
+      ],
+      "usesAppleSignIn": true
     },
     "android": {
       "adaptiveIcon": {

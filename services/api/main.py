@@ -1021,6 +1021,281 @@ def mobile_get_styles():
 
 
 # ============================================================================
+# Mobile Integration Endpoints
+# ============================================================================
+
+@app.post("/api/mobile/users/sync")
+def sync_user(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Sync authenticated Supabase user to backend database.
+    Called after social login to ensure user exists in our DB.
+    Returns user info and credit balance.
+    """
+    # Get or create credits for user
+    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
+    is_new = credit is None
+
+    if not credit:
+        # Give new users 10 free credits
+        credit = Credit(user_id=user.id, balance=10)
+        db.add(credit)
+        db.commit()
+        db.refresh(credit)
+    elif credit.balance == 0:
+        # Give returning users with 0 credits a welcome back bonus
+        credit.balance = 10
+        is_new = True
+        db.commit()
+        db.refresh(credit)
+
+    return {
+        "user_id": str(user.id),
+        "email": user.email,
+        "created": is_new,
+        "credits": {
+            "balance": credit.balance,
+            "is_new_user": is_new
+        }
+    }
+
+
+@app.get("/api/mobile/credits/balance")
+def mobile_get_credits_balance(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Get user credit balance for mobile (requires auth)"""
+
+    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
+
+    if not credit:
+        # Create credit record with welcome bonus
+        credit = Credit(user_id=user.id, balance=10)
+        db.add(credit)
+        db.commit()
+        db.refresh(credit)
+
+    return {
+        "balance": credit.balance,
+        "user_id": str(user.id),
+        "updated_at": credit.updated_at.isoformat() if credit.updated_at else None
+    }
+
+
+class MobilePresignRequest(BaseModel):
+    filename: str
+    content_type: str = "image/jpeg"
+    file_size: int = 10 * 1024 * 1024
+
+
+@app.post("/api/mobile/uploads/presign")
+def mobile_presign_upload(
+    request: MobilePresignRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Generate presigned upload URL for mobile direct-to-R2 uploads"""
+
+    if not R2_ENABLED:
+        raise HTTPException(status_code=503, detail="R2 storage not configured")
+
+    # Get or create "Mobile Uploads" shoot for this user
+    mobile_shoot = db.query(Shoot).filter(
+        Shoot.user_id == user.id,
+        Shoot.name == "Mobile Uploads"
+    ).first()
+
+    if not mobile_shoot:
+        mobile_shoot = Shoot(
+            user_id=user.id,
+            name="Mobile Uploads"
+        )
+        db.add(mobile_shoot)
+        db.flush()
+
+    # Generate asset ID and object key
+    asset_id = str(uuid.uuid4())
+    file_ext = os.path.splitext(request.filename)[1] or ".jpg"
+    object_key = f"{user.id}/{mobile_shoot.id}/{asset_id}/original{file_ext}"
+
+    try:
+        presigned_data = r2_client.generate_presigned_upload_url(
+            object_key=object_key,
+            content_type=request.content_type,
+            expiration=3600,
+            max_file_size=request.file_size,
+        )
+
+        return {
+            "asset_id": asset_id,
+            "shoot_id": str(mobile_shoot.id),
+            "object_key": object_key,
+            "upload_url": presigned_data["url"],
+            "upload_fields": presigned_data["fields"],
+            "expires_in": 3600,
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to generate mobile presigned URL: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class MobileConfirmRequest(BaseModel):
+    asset_id: str
+    shoot_id: str
+    object_key: str
+    filename: str
+    file_size: int
+    content_type: str = "image/jpeg"
+
+
+@app.post("/api/mobile/uploads/confirm")
+def mobile_confirm_upload(
+    request: MobileConfirmRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Confirm upload completion and create asset record"""
+
+    # Verify shoot belongs to user
+    shoot = db.query(Shoot).filter(
+        Shoot.id == request.shoot_id,
+        Shoot.user_id == user.id
+    ).first()
+
+    if not shoot:
+        raise HTTPException(status_code=404, detail="Shoot not found")
+
+    # Optionally verify file exists in R2
+    if R2_ENABLED:
+        try:
+            if not r2_client.check_file_exists(request.object_key):
+                raise HTTPException(status_code=400, detail="File not found in storage")
+        except Exception as e:
+            logger.warning(f"Could not verify file existence: {e}")
+
+    # Create asset record
+    asset = Asset(
+        id=request.asset_id,
+        shoot_id=request.shoot_id,
+        user_id=user.id,
+        original_filename=request.filename,
+        file_path=request.object_key,
+        file_size=request.file_size,
+        mime_type=request.content_type,
+    )
+    db.add(asset)
+    db.commit()
+    db.refresh(asset)
+
+    # Generate download URL
+    upload_url = None
+    if R2_ENABLED:
+        try:
+            upload_url = r2_client.generate_presigned_download_url(
+                object_key=request.object_key,
+                expiration=3600,
+                filename=request.filename,
+            )
+        except Exception as e:
+            logger.error(f"Failed to generate download URL: {e}")
+
+    return {
+        "id": str(asset.id),
+        "filename": asset.original_filename,
+        "size": asset.file_size,
+        "upload_url": upload_url,
+    }
+
+
+@app.get("/api/mobile/gallery")
+def get_gallery(
+    page: int = 1,
+    per_page: int = 50,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Get all user photos with signed URLs for mobile gallery view"""
+
+    # Count total assets
+    total = db.query(Asset).filter(Asset.user_id == user.id).count()
+
+    # Get paginated assets with shoots and jobs
+    assets = (
+        db.query(Asset)
+        .filter(Asset.user_id == user.id)
+        .order_by(Asset.created_at.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    photos = []
+    for asset in assets:
+        # Generate presigned URL for original
+        upload_url = None
+        if R2_ENABLED:
+            try:
+                upload_url = r2_client.generate_presigned_download_url(
+                    object_key=asset.file_path,
+                    expiration=3600,
+                    filename=asset.original_filename,
+                )
+            except Exception as e:
+                logger.error(f"Failed to generate URL for asset {asset.id}: {e}")
+
+        # Build job list with output URLs
+        job_list = []
+        for job in asset.jobs:
+            job_data = {
+                "id": str(job.id),
+                "status": job.status.value,
+                "prompt": job.prompt,
+                "credits_used": job.credits_used,
+                "created_at": job.created_at.isoformat(),
+                "output_url": None,
+            }
+
+            if job.output_path and R2_ENABLED:
+                try:
+                    job_data["output_url"] = r2_client.generate_presigned_download_url(
+                        object_key=job.output_path,
+                        expiration=3600,
+                        filename=f"enhanced_{asset.original_filename}",
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to generate URL for job {job.id}: {e}")
+
+            job_list.append(job_data)
+
+        photos.append({
+            "id": str(asset.id),
+            "filename": asset.original_filename,
+            "upload_url": upload_url,
+            "thumbnail_url": None,  # Future: generate thumbnails
+            "shoot": {
+                "id": str(asset.shoot_id),
+                "name": asset.shoot.name,
+            },
+            "created_at": asset.created_at.isoformat(),
+            "jobs": job_list,
+        })
+
+    return {
+        "photos": photos,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "total_pages": (total + per_page - 1) // per_page if total > 0 else 0,
+        }
+    }
+
+
+# ============================================================================
 # RQ Dashboard Integration (Optional)
 # ============================================================================
 

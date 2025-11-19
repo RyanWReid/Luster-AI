@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -7,26 +7,36 @@ import {
   ScrollView,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
+import { useAuth } from '../context/AuthContext'
+import enhancementService from '../services/enhancementService'
 
 const STYLE_PRESETS = [
-  { id: 'dusk', name: 'Twilight Sky', icon: 'partly-sunny' },
-  { id: 'lawn', name: 'Perfect Lawn', icon: 'leaf' },
-  { id: 'sky', name: 'Blue Sky', icon: 'sunny' },
-  { id: 'staging', name: 'Virtual Staging', icon: 'home' },
+  { id: 'luster', name: 'Luster', icon: 'sparkles' },
+  { id: 'flambient', name: 'Flambient', icon: 'sunny' },
 ]
 
 export default function HomeScreen() {
+  const { credits, refreshCredits, synced } = useAuth()
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
-  const [selectedStyle, setSelectedStyle] = useState<string>('dusk')
-  const [credits, setCredits] = useState(3)
+  const [selectedStyle, setSelectedStyle] = useState<string>('luster')
+  const [processing, setProcessing] = useState(false)
+  const [enhancedImageUrl, setEnhancedImageUrl] = useState<string | null>(null)
+
+  // Refresh credits when user is synced
+  useEffect(() => {
+    if (synced) {
+      refreshCredits()
+    }
+  }, [synced])
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    
+
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please allow access to your photos')
       return
@@ -34,34 +44,36 @@ export default function HomeScreen() {
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 1,
+      quality: 0.9,
       allowsEditing: false,
     })
 
     if (!result.canceled && result.assets[0]) {
       setSelectedImage(result.assets[0].uri)
+      setEnhancedImageUrl(null)
     }
   }
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync()
-    
+
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Please allow access to your camera')
       return
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      quality: 1,
+      quality: 0.9,
       allowsEditing: false,
     })
 
     if (!result.canceled && result.assets[0]) {
       setSelectedImage(result.assets[0].uri)
+      setEnhancedImageUrl(null)
     }
   }
 
-  const handleEnhance = () => {
+  const handleEnhance = async () => {
     if (!selectedImage) {
       Alert.alert('No image', 'Please select an image first')
       return
@@ -70,8 +82,38 @@ export default function HomeScreen() {
       Alert.alert('No credits', 'Purchase more credits to continue')
       return
     }
-    
-    Alert.alert('Coming Soon', 'Enhancement processing will be implemented here')
+
+    try {
+      setProcessing(true)
+
+      // Start enhancement job - sends image to backend which processes and stores output in R2
+      const enhanceResult = await enhancementService.enhanceImage({
+        imageUrl: selectedImage,
+        style: selectedStyle as 'luster' | 'flambient',
+      })
+
+      // Poll for completion
+      const jobResult = await enhancementService.pollJobStatus(
+        enhanceResult.job_id,
+        (status) => {
+          console.log(`Enhancement status: ${status}`)
+        }
+      )
+
+      if (jobResult.status === 'succeeded' && jobResult.enhanced_image_url) {
+        setEnhancedImageUrl(jobResult.enhanced_image_url)
+        // Refresh credits after successful enhancement
+        await refreshCredits()
+        Alert.alert('Success', 'Your photo has been enhanced!')
+      } else {
+        Alert.alert('Enhancement failed', jobResult.error || 'Unknown error')
+      }
+    } catch (error: any) {
+      console.error('Enhancement error:', error)
+      Alert.alert('Error', error.message || 'Failed to enhance photo')
+    } finally {
+      setProcessing(false)
+    }
   }
 
   return (
@@ -90,7 +132,10 @@ export default function HomeScreen() {
               <Image source={{ uri: selectedImage }} style={styles.previewImage} />
               <TouchableOpacity
                 style={styles.removeButton}
-                onPress={() => setSelectedImage(null)}
+                onPress={() => {
+                  setSelectedImage(null)
+                  setEnhancedImageUrl(null)
+                }}
               >
                 <Ionicons name="close-circle" size={32} color="#ef4444" />
               </TouchableOpacity>
@@ -98,16 +143,27 @@ export default function HomeScreen() {
           ) : (
             <View style={styles.uploadButtons}>
               <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
-                <Ionicons name="images" size={32} color="#6366f1" />
+                <Ionicons name="images" size={32} color="#D4AF37" />
                 <Text style={styles.uploadButtonText}>Choose Photo</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.uploadButton} onPress={takePhoto}>
-                <Ionicons name="camera" size={32} color="#6366f1" />
+                <Ionicons name="camera" size={32} color="#D4AF37" />
                 <Text style={styles.uploadButtonText}>Take Photo</Text>
               </TouchableOpacity>
             </View>
           )}
         </View>
+
+        {enhancedImageUrl && (
+          <View style={styles.resultSection}>
+            <Text style={styles.sectionTitle}>Enhanced Result</Text>
+            <Image
+              source={{ uri: enhancedImageUrl }}
+              style={styles.resultImage}
+              resizeMode="contain"
+            />
+          </View>
+        )}
 
         <View style={styles.stylesSection}>
           <Text style={styles.sectionTitle}>Enhancement Style</Text>
@@ -124,7 +180,7 @@ export default function HomeScreen() {
                 <Ionicons
                   name={style.icon as any}
                   size={32}
-                  color={selectedStyle === style.id ? '#6366f1' : '#9ca3af'}
+                  color={selectedStyle === style.id ? '#D4AF37' : '#9ca3af'}
                 />
                 <Text
                   style={[
@@ -140,11 +196,21 @@ export default function HomeScreen() {
         </View>
 
         <TouchableOpacity
-          style={[styles.enhanceButton, !selectedImage && styles.enhanceButtonDisabled]}
+          style={[
+            styles.enhanceButton,
+            (!selectedImage || processing) && styles.enhanceButtonDisabled,
+          ]}
           onPress={handleEnhance}
-          disabled={!selectedImage}
+          disabled={!selectedImage || processing}
         >
-          <Text style={styles.enhanceButtonText}>Enhance Photo</Text>
+          {processing ? (
+            <View style={styles.buttonContent}>
+              <ActivityIndicator color="#0a0a0a" size="small" />
+              <Text style={styles.enhanceButtonText}>Processing...</Text>
+            </View>
+          ) : (
+            <Text style={styles.enhanceButtonText}>Enhance Photo</Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -154,7 +220,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#0a0a0a',
   },
   scrollView: {
     flex: 1,
@@ -165,23 +231,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: 'white',
+    backgroundColor: '#1a1a1a',
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: '#2a2a2a',
   },
   creditText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#111827',
+    color: '#D4AF37',
   },
   buyButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: '#D4AF37',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
   },
   buyButtonText: {
-    color: 'white',
+    color: '#0a0a0a',
     fontWeight: '600',
   },
   uploadSection: {
@@ -193,18 +259,18 @@ const styles = StyleSheet.create({
   },
   uploadButton: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#1a1a1a',
     borderRadius: 12,
     paddingVertical: 32,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#e5e7eb',
+    borderColor: '#2a2a2a',
     borderStyle: 'dashed',
   },
   uploadButtonText: {
     marginTop: 8,
     fontSize: 14,
-    color: '#6b7280',
+    color: '#9ca3af',
   },
   imageContainer: {
     position: 'relative',
@@ -213,12 +279,21 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 300,
     borderRadius: 12,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#1a1a1a',
   },
   removeButton: {
     position: 'absolute',
     top: 8,
     right: 8,
+  },
+  resultSection: {
+    padding: 16,
+  },
+  resultImage: {
+    width: '100%',
+    height: 300,
+    borderRadius: 12,
+    backgroundColor: '#1a1a1a',
   },
   stylesSection: {
     padding: 16,
@@ -226,7 +301,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#111827',
+    color: '#ffffff',
     marginBottom: 12,
   },
   styleGrid: {
@@ -236,28 +311,28 @@ const styles = StyleSheet.create({
   },
   styleCard: {
     width: '47%',
-    backgroundColor: 'white',
+    backgroundColor: '#1a1a1a',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#e5e7eb',
+    borderColor: '#2a2a2a',
   },
   styleCardSelected: {
-    borderColor: '#6366f1',
-    backgroundColor: '#f0f9ff',
+    borderColor: '#D4AF37',
+    backgroundColor: '#1a1a0a',
   },
   styleCardText: {
     marginTop: 8,
     fontSize: 14,
-    color: '#6b7280',
+    color: '#9ca3af',
   },
   styleCardTextSelected: {
-    color: '#6366f1',
+    color: '#D4AF37',
     fontWeight: '600',
   },
   enhanceButton: {
-    backgroundColor: '#6366f1',
+    backgroundColor: '#D4AF37',
     marginHorizontal: 16,
     marginVertical: 24,
     paddingVertical: 16,
@@ -267,8 +342,13 @@ const styles = StyleSheet.create({
   enhanceButtonDisabled: {
     opacity: 0.5,
   },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   enhanceButtonText: {
-    color: 'white',
+    color: '#0a0a0a',
     fontSize: 18,
     fontWeight: '600',
   },
