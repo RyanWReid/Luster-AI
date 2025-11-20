@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 const STORAGE_KEY = '@luster_listings'
 
-export type PropertyStatus = 'processing' | 'ready' | 'completed'
+export type PropertyStatus = 'processing' | 'ready' | 'completed' | 'failed'
 
 export interface PropertyListing {
   id: string
@@ -15,7 +15,8 @@ export interface PropertyListing {
   images?: any[] // All enhanced images for this listing
   originalImages?: any[] // Original images before enhancement
   isEnhanced?: boolean
-  status: PropertyStatus // 'processing' | 'ready' | 'completed'
+  status: PropertyStatus // 'processing' | 'ready' | 'completed' | 'failed'
+  error?: string // Error message if status is 'failed'
   createdAt: Date
 }
 

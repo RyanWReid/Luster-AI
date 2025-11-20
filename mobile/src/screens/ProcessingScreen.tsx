@@ -289,14 +289,23 @@ export default function ProcessingScreen() {
               results.push(fullUrl)
               console.log(`Photo ${i + 1} enhanced successfully: ${fullUrl}`)
             } else {
-              // Use original if enhancement failed
-              console.log(`Photo ${i + 1} enhancement failed, using original:`, jobResult.error)
-              results.push(photos[i])
+              // Enhancement failed - throw error to trigger failure flow
+              const errorMsg = jobResult.error || 'Enhancement failed'
+              console.log(`Photo ${i + 1} enhancement failed:`, errorMsg)
+              throw new Error(errorMsg)
             }
-          } catch (error) {
+          } catch (error: any) {
             console.error(`Photo ${i + 1} enhancement error:`, error)
-            // Use original if there's an error
-            results.push(photos[i])
+            // Mark property as failed and show error
+            if (currentPropertyId) {
+              updateListing(currentPropertyId, {
+                status: 'failed',
+                error: error.message || 'Enhancement failed',
+              })
+            }
+            hapticFeedback.notification('error')
+            navigation.navigate('Main' as never)
+            return // Exit early on failure
           }
 
           setProcessedCount(i + 1)
