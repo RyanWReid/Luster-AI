@@ -665,12 +665,64 @@ def serve_upload(filename: str):
 
 
 @app.get("/outputs/{filename}")
-def serve_output(filename: str):
-    """Serve processed output files"""
-    file_path = os.path.join(OUTPUTS_DIR, filename)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-    return FileResponse(file_path)
+def serve_output(filename: str, db: Session = Depends(get_db)):
+    """Serve processed output files - generates presigned URL from R2"""
+    logger.info(f"===== OUTPUTS REQUEST =====")
+    logger.info(f"Requested filename: {filename}")
+
+    # Find the job by looking up the filename (job_id.jpg)
+    job_id = filename.replace('.jpg', '').replace('.jpeg', '').replace('.png', '')
+    logger.info(f"Extracted job_id: {job_id}")
+
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        logger.error(f"Job not found: {job_id}")
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if not job.output_path:
+        logger.error(f"Job {job_id} has no output_path (status: {job.status})")
+        raise HTTPException(status_code=404, detail="Output file not found")
+
+    logger.info(f"Job found: {job_id}")
+    logger.info(f"  - Status: {job.status}")
+    logger.info(f"  - Output path: {job.output_path}")
+    logger.info(f"  - R2_ENABLED: {R2_ENABLED}")
+    logger.info(f"  - Path starts with '/': {job.output_path.startswith('/')}")
+
+    # If R2 is enabled and path doesn't start with /, it's an R2 key
+    if R2_ENABLED and not job.output_path.startswith('/'):
+        logger.info(f"Using R2 path - generating presigned URL")
+        try:
+            # Generate presigned URL for R2 object (valid for 1 hour)
+            logger.info(f"Calling generate_presigned_download_url with key: {job.output_path}")
+            presigned_url = r2_client.generate_presigned_download_url(
+                object_key=job.output_path,
+                expiration=3600
+            )
+            logger.info(f"✅ Generated presigned URL: {presigned_url[:100]}...")
+            logger.info(f"Returning 302 redirect to R2")
+
+            # Redirect to the presigned URL
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=presigned_url, status_code=302)
+        except Exception as e:
+            logger.error(f"❌ Failed to generate presigned URL for {job.output_path}")
+            logger.error(f"Error type: {type(e).__name__}")
+            logger.error(f"Error message: {str(e)}")
+            logger.error(f"Error details: {repr(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            raise HTTPException(status_code=500, detail=f"Failed to retrieve output file: {str(e)}")
+    else:
+        # Local filesystem fallback
+        logger.info(f"Using local filesystem path")
+        file_path = os.path.join(OUTPUTS_DIR, filename)
+        logger.info(f"Looking for file at: {file_path}")
+        if not os.path.exists(file_path):
+            logger.error(f"File not found on disk: {file_path}")
+            raise HTTPException(status_code=404, detail="File not found")
+        logger.info(f"✅ Serving local file: {file_path}")
+        return FileResponse(file_path)
 
 
 @app.get("/credits")
