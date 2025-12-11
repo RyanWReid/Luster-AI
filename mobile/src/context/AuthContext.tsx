@@ -191,24 +191,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Use native Apple Sign In on iOS
       if (Platform.OS === 'ios') {
         // Generate a random nonce for security
-        const nonce = Math.random().toString(36).substring(2, 10)
+        const rawNonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
 
-        // Request Apple credentials
+        // Hash the nonce with SHA-256 (required by Apple)
+        const hashedNonce = await Crypto.digestStringAsync(
+          Crypto.CryptoDigestAlgorithm.SHA256,
+          rawNonce
+        )
+
+        // Request Apple credentials with the HASHED nonce
         const credential = await AppleAuthentication.signInAsync({
           requestedScopes: [
             AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
             AppleAuthentication.AppleAuthenticationScope.EMAIL,
           ],
+          nonce: hashedNonce,
         })
 
-        // Sign in with Supabase using the Apple ID token
+        console.log('Apple credential received:', {
+          user: credential.user,
+          email: credential.email,
+          fullName: credential.fullName,
+        })
+
+        // Sign in with Supabase using the Apple ID token and RAW nonce
         const { data, error } = await supabase.auth.signInWithIdToken({
           provider: 'apple',
           token: credential.identityToken!,
-          nonce,
+          nonce: rawNonce,  // Use the ORIGINAL (unhashed) nonce here
         })
 
-        if (error) throw error
+        if (error) {
+          console.error('Supabase sign in error:', error)
+          throw error
+        }
 
         console.log('✅ Signed in with Apple successfully!', data)
       } else {
@@ -219,7 +235,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // User canceled the sign-in flow
         console.log('User canceled Apple Sign In')
       } else {
-        Alert.alert('Error', error.message)
+        console.error('Apple Sign In error:', error)
+        Alert.alert('Error', error.message || 'Failed to sign in with Apple')
       }
     }
   }
