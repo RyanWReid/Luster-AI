@@ -167,29 +167,38 @@ class EnhancementService {
       }
       console.log('✅ Connection test passed')
       
+      // Get auth token
+      const token = await getAuthToken()
+      if (!token) {
+        throw new Error('Not authenticated. Please sign in to enhance images.')
+      }
+
       // Try both methods: FormData with blob and base64
       try {
         // Method 1: FormData with proper file object
         console.log('===== METHOD 1: FormData =====')
         const formData = new FormData()
-        
+
         // Create a proper file object for React Native
         const file: any = {
           uri: params.imageUrl,
           type: 'image/jpeg',
           name: 'photo.jpg',
         }
-        
+
         console.log('Image file object created:', file)
-        
+
         formData.append('image', file as any)
         formData.append('style', params.style)
         console.log('FormData prepared with image and style')
-        
+
         console.log('Sending FormData request to:', `${API_BASE_URL}/api/mobile/enhance`)
         const startTime = Date.now()
         const response = await fetch(`${API_BASE_URL}/api/mobile/enhance`, {
           method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
           body: formData,
         })
         const responseTime = Date.now() - startTime
@@ -339,8 +348,17 @@ class EnhancementService {
    * Get current job status
    */
   async getJobStatus(jobId: string): Promise<JobStatusResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/mobile/enhance/${jobId}/status`)
-    
+    const token = await getAuthToken()
+
+    const headers: Record<string, string> = {}
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/mobile/enhance/${jobId}/status`, {
+      headers
+    })
+
     if (!response.ok) {
       throw new Error('Failed to get job status')
     }

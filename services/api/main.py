@@ -695,25 +695,16 @@ async def mobile_enhance(
     image: UploadFile = File(...),
     style: str = Form("luster"),
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
+    user: User = Depends(get_current_user),
 ):
-    """Mobile endpoint to start image enhancement"""
+    """Mobile endpoint to start image enhancement (requires authentication)"""
 
     print(f"\n=== MOBILE ENHANCE DEBUG ===")
     print(f"Style: {style}")
     print(f"File: {image.filename}")
     print(f"Content type: {image.content_type}")
+    print(f"User: {user.id}")
 
-    # Use authenticated user or fall back to default for development
-    if not user:
-        logger.warning("Mobile enhance called without authentication, using DEFAULT_USER_ID")
-        user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
-        if not user:
-            # Create default user if not exists
-            user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
-            db.add(user)
-            db.commit()
-    
     mobile_shoot = db.query(Shoot).filter(
         Shoot.user_id == user.id,
         Shoot.name == "Mobile Uploads"
@@ -855,13 +846,14 @@ async def mobile_enhance(
 async def mobile_enhance_base64(
     request: Base64ImageRequest,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
+    user: User = Depends(get_current_user),
 ):
-    """Mobile endpoint to enhance image from base64 data"""
+    """Mobile endpoint to enhance image from base64 data (requires authentication)"""
 
     print(f"\n=== MOBILE ENHANCE BASE64 DEBUG ===")
     print(f"Style: {request.style}")
     print(f"Image data length: {len(request.image)} chars")
+    print(f"User: {user.id}")
 
     # Decode base64 image
     try:
@@ -870,15 +862,6 @@ async def mobile_enhance_base64(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
 
-    # Use authenticated user or fall back to default for development
-    if not user:
-        logger.warning("Mobile enhance-base64 called without authentication, using DEFAULT_USER_ID")
-        user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
-        if not user:
-            user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
-            db.add(user)
-            db.commit()
-    
     mobile_shoot = db.query(Shoot).filter(
         Shoot.user_id == user.id,
         Shoot.name == "Mobile Uploads"
@@ -999,19 +982,18 @@ async def mobile_enhance_base64(
 def mobile_job_status(
     job_id: str,
     db: Session = Depends(get_db),
-    user: Optional[User] = Depends(get_optional_user),
+    user: User = Depends(get_current_user),
 ):
-    """Get status of mobile enhancement job"""
+    """Get status of mobile enhancement job (requires authentication)"""
 
-    # Allow unauthenticated access for backward compatibility
-    # but if authenticated, verify ownership
-    job = db.query(Job).filter(Job.id == job_id).first()
+    # Find job and verify ownership
+    job = db.query(Job).filter(
+        Job.id == job_id,
+        Job.user_id == user.id
+    ).first()
+
     if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    # If authenticated, verify ownership
-    if user and job.user_id != user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
+        raise HTTPException(status_code=404, detail="Job not found or access denied")
     
     result = {
         "job_id": str(job.id),
