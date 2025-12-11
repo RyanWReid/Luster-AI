@@ -273,15 +273,25 @@ FORBIDDEN:
 
             image = Image.open(BytesIO(image_data))
 
-            # Create new image without EXIF
-            if hasattr(image, "_getexif"):
-                # Remove all EXIF data
-                clean_image = Image.new(image.mode, image.size)
-                clean_image.putdata(list(image.getdata()))
+            # For PNG images or images without EXIF, just return original
+            # (PNG doesn't use EXIF the same way JPEG does)
+            if image.format != "JPEG":
+                return image_data
 
-                # Save to bytes
+            # Create new image without EXIF (JPEG only)
+            if hasattr(image, "_getexif"):
+                # Convert RGBA to RGB if necessary (JPEG doesn't support alpha)
+                if image.mode in ("RGBA", "LA", "P"):
+                    # Create white background
+                    rgb_image = Image.new("RGB", image.size, (255, 255, 255))
+                    if image.mode == "P":
+                        image = image.convert("RGBA")
+                    rgb_image.paste(image, mask=image.split()[-1] if image.mode in ("RGBA", "LA") else None)
+                    image = rgb_image
+
+                # Save without EXIF
                 output = BytesIO()
-                clean_image.save(output, format=image.format or "JPEG", quality=95)
+                image.save(output, format="JPEG", quality=95)
                 return output.getvalue()
             else:
                 # No EXIF data present
