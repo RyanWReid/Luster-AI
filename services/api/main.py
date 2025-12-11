@@ -553,7 +553,23 @@ def get_job(
     if job.completed_at:
         result["completed_at"] = job.completed_at.isoformat()
     if job.output_path:
-        result["output_url"] = f"/outputs/{os.path.basename(job.output_path)}"
+        # Generate presigned URL for R2 output or fallback to relative path
+        if R2_ENABLED:
+            try:
+                # Get asset for filename
+                asset = db.query(Asset).filter(Asset.id == job.asset_id).first()
+                filename = f"enhanced_{asset.original_filename}" if asset else "enhanced.jpg"
+
+                result["output_url"] = r2_client.generate_presigned_download_url(
+                    object_key=job.output_path,
+                    expiration=3600,
+                    filename=filename,
+                )
+            except Exception as e:
+                logger.error(f"Failed to generate presigned URL for job {job.id}: {e}")
+                result["output_url"] = f"/outputs/{os.path.basename(job.output_path)}"
+        else:
+            result["output_url"] = f"/outputs/{os.path.basename(job.output_path)}"
     if job.error_message:
         result["error_message"] = job.error_message
 
