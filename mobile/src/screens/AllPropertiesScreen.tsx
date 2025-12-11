@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useState } from 'react'
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Image,
   Dimensions,
   Animated,
+  Alert,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -97,6 +98,17 @@ const allProperties = [
 // Property Card Component
 const PropertyCard = ({ item, onPress }: { item: any; onPress: (item: any) => void }) => {
   const cardScale = useRef(new Animated.Value(1)).current
+  const isFailed = item.status === 'failed'
+
+  // Debug image source
+  const imageUri = typeof item.image === 'object' && item.image.uri ? item.image.uri : null
+  console.log('🖼️ PropertyCard rendering:', {
+    id: item.id,
+    address: item.address,
+    imageType: typeof item.image,
+    imageSource: imageUri || 'local require()',
+    fullUri: imageUri,
+  })
 
   const handlePressIn = () => {
     Animated.spring(cardScale, {
@@ -116,6 +128,44 @@ const PropertyCard = ({ item, onPress }: { item: any; onPress: (item: any) => vo
     }).start()
   }
 
+  const handleImageLoadStart = () => {
+    console.log('🔄 Image load started for:', item.id)
+  }
+
+  const handleImageLoadEnd = () => {
+    console.log('✅ Image loaded successfully for:', item.id)
+  }
+
+  const handleImageError = (error: any) => {
+    console.error('❌ Image load FAILED for:', item.id)
+    console.error('Error details:', {
+      nativeEvent: error.nativeEvent,
+      error: error.nativeEvent?.error,
+      message: error.nativeEvent?.message,
+      uri: imageUri,
+    })
+
+    // Try to fetch the URL directly to see what's happening
+    if (imageUri) {
+      console.log('🔍 Attempting direct fetch to debug...')
+      fetch(imageUri, { method: 'HEAD' })
+        .then(response => {
+          console.log('Direct fetch response:', {
+            status: response.status,
+            statusText: response.statusText,
+            headers: {
+              'content-type': response.headers.get('content-type'),
+              'content-length': response.headers.get('content-length'),
+              'location': response.headers.get('location'),
+            },
+          })
+        })
+        .catch(fetchError => {
+          console.error('Direct fetch also failed:', fetchError.message)
+        })
+    }
+  }
+
   return (
     <Animated.View
       style={[
@@ -123,6 +173,7 @@ const PropertyCard = ({ item, onPress }: { item: any; onPress: (item: any) => vo
         {
           transform: [{ scale: cardScale }],
         },
+        isFailed && styles.failedCard,
       ]}
     >
       <TouchableOpacity
@@ -132,10 +183,23 @@ const PropertyCard = ({ item, onPress }: { item: any; onPress: (item: any) => vo
         onPress={() => onPress(item)}
       >
         <View style={styles.cardImageContainer}>
-          <Image source={item.image} style={styles.gridImage} />
+          <Image
+            source={item.image}
+            style={styles.gridImage}
+            onLoadStart={handleImageLoadStart}
+            onLoadEnd={handleImageLoadEnd}
+            onError={handleImageError}
+          />
+          {isFailed && (
+            <View style={styles.failedOverlay}>
+              <View style={styles.failedBadge}>
+                <Text style={styles.failedBadgeText}>Failed</Text>
+              </View>
+            </View>
+          )}
         </View>
         <BlurView intensity={60} tint="light" style={styles.gridOverlay}>
-          <Text style={styles.gridAddress} numberOfLines={2}>
+          <Text style={[styles.gridAddress, isFailed && styles.failedAddress]} numberOfLines={2}>
             {item.address}
           </Text>
         </BlurView>
@@ -146,15 +210,54 @@ const PropertyCard = ({ item, onPress }: { item: any; onPress: (item: any) => vo
 
 export default function AllPropertiesScreen() {
   const navigation = useNavigation()
-  const { listings } = useListings()
+  const { listings, removeListing, clearListings } = useListings()
 
   // Use real listings if available, otherwise use mock data as fallback
   const displayData = listings.length > 0 ? listings : allProperties
 
+  console.log('=== ALL PROPERTIES SCREEN MOUNTED ===')
+  console.log('Listings count:', listings.length)
+  console.log('Display data count:', displayData.length)
+  console.log('Display data:', displayData.map(d => ({ id: d.id, address: d.address })))
+
+  // Emergency clear all data - triple tap header to trigger
+  const [tapCount, setTapCount] = useState(0)
+  const tapTimer = useRef<NodeJS.Timeout>()
+
+  const handleHeaderTripleTap = () => {
+    setTapCount(prev => prev + 1)
+
+    if (tapTimer.current) clearTimeout(tapTimer.current)
+
+    tapTimer.current = setTimeout(() => {
+      if (tapCount >= 2) {
+        console.log('🗑️ EMERGENCY CLEAR - Deleting all listings')
+        clearListings()
+        Alert.alert('Success', 'All old listings cleared! Pull down to refresh.')
+      }
+      setTapCount(0)
+    }, 500)
+  }
+
   const handlePropertyPress = (item: any) => {
     console.log('Property pressed:', item.id, 'status:', item.status)
     // Navigate based on property status
-    if (item.status === 'processing') {
+    if (item.status === 'failed') {
+      // Property failed - show error and offer to delete
+      Alert.alert(
+        'Enhancement Failed',
+        item.error || 'An unknown error occurred during enhancement.',
+        [
+          {
+            text: 'Continue',
+            onPress: () => {
+              removeListing(item.id)
+            },
+          },
+        ],
+        { cancelable: false }
+      )
+    } else if (item.status === 'processing') {
       // Property is still processing - go to ProcessingScreen
       navigation.navigate('Processing' as never, {
         propertyId: item.id,
@@ -199,7 +302,9 @@ export default function AllPropertiesScreen() {
           >
             <BackIcon size={24} color="#000" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>All Properties</Text>
+          <TouchableOpacity onPress={handleHeaderTripleTap} activeOpacity={1}>
+            <Text style={styles.headerTitle}>All Properties</Text>
+          </TouchableOpacity>
           <View style={styles.backButton} />
         </View>
 
@@ -293,5 +398,29 @@ const styles = StyleSheet.create({
     color: '#374151',
     lineHeight: 20,
     letterSpacing: 0.1,
+  },
+  failedCard: {
+    borderWidth: 2,
+    borderColor: '#ef4444',
+  },
+  failedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(239, 68, 68, 0.3)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  failedBadge: {
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  failedBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  failedAddress: {
+    color: '#ef4444',
   },
 })
