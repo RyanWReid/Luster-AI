@@ -252,11 +252,7 @@ class EnhancementService {
       
       console.log('Sending base64 request to:', `${API_BASE_URL}/api/mobile/enhance-base64`)
 
-      // Get auth token
-      const token = await getAuthToken()
-      if (!token) {
-        throw new Error('Not authenticated. Please sign in again.')
-      }
+      // Token already fetched at the top of the function
 
       const startTime = Date.now()
       const response = await fetch(`${API_BASE_URL}/api/mobile/enhance-base64`, {
