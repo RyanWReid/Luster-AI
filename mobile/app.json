@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Luster AI",
+    "slug": "luster-ai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -19,7 +19,12 @@
       "associatedDomains": [
         "applinks:rdzanmwdqmidwifviwyr.supabase.co"
       ],
-      "usesAppleSignIn": true
+      "usesAppleSignIn": true,
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "We need access to your photos to enhance real estate images",
+        "NSCameraUsageDescription": "We need access to your camera to take photos for enhancement"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -35,12 +40,20 @@
               "scheme": "lusterai"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "11dad8dd-612b-4997-911b-9219841686bf"
+      }
     }
   }
 }
