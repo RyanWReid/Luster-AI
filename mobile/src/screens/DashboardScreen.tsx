@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -177,13 +177,19 @@ type SortOrder = 'asc' | 'desc'
 
 export default function DashboardScreen() {
   const navigation = useNavigation()
-  const { listings } = useListings()
+  const { listings, syncFromBackend } = useListings()
   const { creditBalance, isLoadingCredits } = usePhotos()
   const [selectedFilter, setSelectedFilter] = useState<FilterTag>('Recent')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [searchText, setSearchText] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
-  
+
+  // Sync listings from backend on mount
+  useEffect(() => {
+    console.log('🏠 DashboardScreen mounted - syncing listings from backend')
+    syncFromBackend()
+  }, []) // Empty deps array = run once on mount
+
   // Debug: Log listings
   console.log('DashboardScreen - listings count:', listings.length)
   if (listings.length > 0) {

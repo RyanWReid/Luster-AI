@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import listingsService from '../services/listingsService'
 
 const STORAGE_KEY = '@luster_listings'
 
@@ -27,6 +28,7 @@ interface ListingsContextType {
   updateListingName: (id: string, newName: string) => void
   removeListing: (id: string) => void
   clearListings: () => void
+  syncFromBackend: () => Promise<void>
   isLoading: boolean
   isProcessing: (id: string) => boolean
   markAsProcessing: (id: string) => void
@@ -117,6 +119,23 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
     setListings([])
   }
 
+  const syncFromBackend = async () => {
+    try {
+      console.log('🔄 Syncing listings from backend...')
+      const backendListings = await listingsService.fetchListings()
+
+      if (backendListings.length > 0) {
+        console.log(`✅ Synced ${backendListings.length} listings from backend`)
+        // Merge with local listings (backend is source of truth)
+        setListings(backendListings)
+      } else {
+        console.log('No listings found on backend')
+      }
+    } catch (error) {
+      console.error('Failed to sync listings from backend:', error)
+    }
+  }
+
   const isProcessing = (id: string): boolean => {
     return processingPropertiesRef.current.has(id)
   }
@@ -135,6 +154,7 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
         updateListingName,
         removeListing,
         clearListings,
+        syncFromBackend,
         isLoading,
         isProcessing,
         markAsProcessing
