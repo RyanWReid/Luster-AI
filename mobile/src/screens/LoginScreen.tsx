@@ -103,7 +103,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { signInWithEmail, bypassLogin } = useAuth()
+  const { signInWithEmail, signInWithApple, signInWithGoogle, signInWithFacebook, bypassLogin } = useAuth()
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -184,8 +184,27 @@ export default function LoginScreen() {
     // setLoading(false)
   }
 
-  const handleSocialLogin = (provider: string) => {
-    console.log(`Login with ${provider}`)
+  const handleSocialLogin = async (provider: string) => {
+    setLoading(true)
+    try {
+      switch (provider) {
+        case 'Apple':
+          await signInWithApple()
+          break
+        case 'Google':
+          await signInWithGoogle()
+          break
+        case 'Facebook':
+          await signInWithFacebook()
+          break
+        default:
+          console.log(`Login with ${provider}`)
+      }
+    } catch (error) {
+      console.error(`Failed to sign in with ${provider}:`, error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleForgotPassword = () => {
