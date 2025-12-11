@@ -256,6 +256,16 @@ class Worker:
                 print(f"Job {job.id} completed successfully")
                 print(f"Output saved to: {final_output_path}")
 
+                # Clean up original image from R2 (we only keep outputs)
+                if self.r2_enabled and self.is_r2_path(asset.file_path):
+                    try:
+                        print(f"Deleting original from R2: {asset.file_path}")
+                        r2_client.delete_file(asset.file_path)
+                        print(f"✅ Original deleted from R2")
+                    except Exception as e:
+                        print(f"⚠️  Warning: Could not delete original from R2: {e}")
+                        # Don't fail the job if cleanup fails
+
             else:
                 # Get error details from result
                 error_detail = result.get("error", "Image processing failed")
@@ -284,6 +294,15 @@ class Worker:
                 "completed_at": job.completed_at.isoformat(),
                 "credits_refunded": job.credits_used
             })
+
+            # Clean up original image from R2 even on failure
+            if self.r2_enabled and 'asset' in locals() and self.is_r2_path(asset.file_path):
+                try:
+                    print(f"Deleting original from R2 after failure: {asset.file_path}")
+                    r2_client.delete_file(asset.file_path)
+                    print(f"✅ Original deleted from R2")
+                except Exception as cleanup_error:
+                    print(f"⚠️  Warning: Could not delete original from R2: {cleanup_error}")
 
         finally:
             # Clean up temp files
