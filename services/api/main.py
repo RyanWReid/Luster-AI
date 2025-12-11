@@ -1118,6 +1118,67 @@ def mobile_get_styles():
     }
 
 
+@app.get("/api/mobile/listings")
+def mobile_get_listings(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Get user's completed property listings for mobile app"""
+    logger.info(f"Fetching listings for user: {user.id}")
+
+    # Get all shoots for this user with completed jobs
+    shoots = db.query(Shoot).filter(Shoot.user_id == user.id).all()
+
+    listings = []
+
+    for shoot in shoots:
+        # Get all succeeded jobs for this shoot
+        jobs = db.query(Job).join(Asset).filter(
+            Asset.shoot_id == shoot.id,
+            Job.status == JobStatus.succeeded,
+            Job.output_path.isnot(None)
+        ).order_by(Job.completed_at.desc()).all()
+
+        if not jobs:
+            continue  # Skip shoots with no completed jobs
+
+        # Get the first asset for metadata
+        first_asset = db.query(Asset).filter(Asset.shoot_id == shoot.id).first()
+        if not first_asset:
+            continue
+
+        # Build enhanced image URLs
+        enhanced_images = []
+        for job in jobs:
+            # Generate the full output URL
+            image_url = f"/outputs/{os.path.basename(job.output_path)}"
+            enhanced_images.append({"uri": image_url})
+
+        # Create listing object
+        listing = {
+            "id": shoot.id,
+            "address": shoot.name or first_asset.original_filename.replace('.jpg', '').replace('.heic', ''),
+            "price": "",  # Not stored in DB yet
+            "beds": 0,  # Not stored in DB yet
+            "baths": 0,  # Not stored in DB yet
+            "image": {"uri": enhanced_images[0]["uri"]} if enhanced_images else None,
+            "images": enhanced_images,
+            "originalImages": [],  # Originals are deleted after processing
+            "isEnhanced": True,
+            "status": "completed",
+            "createdAt": shoot.created_at.isoformat(),
+        }
+
+        listings.append(listing)
+
+    logger.info(f"Found {len(listings)} listings for user {user.id}")
+
+    return {
+        "listings": listings,
+        "count": len(listings)
+    }
+
+
 # ============================================================================
 # Mobile Integration Endpoints
 # ============================================================================
