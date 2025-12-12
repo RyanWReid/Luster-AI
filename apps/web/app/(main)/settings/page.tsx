@@ -4,44 +4,43 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { DesktopLayout } from '@/app/components/features/desktop-layout'
-import { Button } from '@/app/components/ui/button'
-import { Input } from '@/app/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/app/components/ui/card'
-import { Badge } from '@/app/components/ui/badge'
 import { ToastProvider, useErrorToast, useSuccessToast } from '@/app/components/ui/toast'
-import {
-  User,
-  Mail,
-  Phone,
-  Lock,
-  Crown,
-  Gift,
-  CreditCard,
-  LogOut,
-  ChevronRight,
-  Copy,
-  Star,
-  Zap,
-  Shield,
-  Settings as SettingsIcon,
-  Bell,
-  HelpCircle,
-  ExternalLink
-} from 'lucide-react'
+import { SettingsNav, SettingsSection } from '@/app/components/settings/settings-nav'
+import { SettingsTabs } from '@/app/components/settings/settings-tabs'
+import { AccountSection } from '@/app/components/settings/sections/account-section'
+import { SubscriptionSection } from '@/app/components/settings/sections/subscription-section'
+import { PreferencesSection } from '@/app/components/settings/sections/preferences-section'
+import { SupportSection } from '@/app/components/settings/sections/support-section'
+import { ProfileEditModal } from '@/app/components/settings/profile-edit-modal'
 import type { UserProfile, UserPlan, ReferralCode, User as UserType } from '@/app/types'
 
-interface SettingsContentProps {}
+const APP_VERSION = '1.0.0'
 
-function SettingsContent({}: SettingsContentProps) {
+interface PreferencesState {
+  emailNotifications: boolean
+  pushNotifications: boolean
+  marketingEmails: boolean
+  autoDownload: boolean
+  highQualityDefault: boolean
+}
+
+function SettingsContent() {
   const [user, setUser] = useState<UserType | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [plan, setPlan] = useState<UserPlan | null>(null)
   const [referralCode, setReferralCode] = useState<ReferralCode | null>(null)
   const [credits, setCredits] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [editingField, setEditingField] = useState<string | null>(null)
-  const [tempValue, setTempValue] = useState('')
-  
+  const [activeSection, setActiveSection] = useState<SettingsSection>('account')
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [preferences, setPreferences] = useState<PreferencesState>({
+    emailNotifications: true,
+    pushNotifications: false,
+    marketingEmails: false,
+    autoDownload: false,
+    highQualityDefault: true,
+  })
+
   const router = useRouter()
   const supabase = createClientComponentClient()
   const errorToast = useErrorToast()
@@ -55,7 +54,7 @@ function SettingsContent({}: SettingsContentProps) {
     phone: '+1 (555) 123-4567',
     avatar_url: undefined,
     created_at: '2024-01-15T10:30:00Z',
-    updated_at: '2024-01-16T14:20:00Z'
+    updated_at: '2024-01-16T14:20:00Z',
   }
 
   const mockPlan: UserPlan = {
@@ -64,10 +63,15 @@ function SettingsContent({}: SettingsContentProps) {
     plan_type: 'free',
     credits_included: 10,
     price_monthly: undefined,
-    features: ['Standard quality processing (1024x1024)', 'Basic enhancement styles', 'Email support', '5 photos per month'],
+    features: [
+      'Standard quality processing (1024x1024)',
+      'Basic enhancement styles',
+      'Email support',
+      '5 photos per month',
+    ],
     active: true,
     expires_at: undefined,
-    created_at: '2024-01-15T10:30:00Z'
+    created_at: '2024-01-15T10:30:00Z',
   }
 
   const mockReferral: ReferralCode = {
@@ -79,7 +83,7 @@ function SettingsContent({}: SettingsContentProps) {
     max_uses: 10,
     active: true,
     created_at: '2024-01-15T10:30:00Z',
-    expires_at: undefined
+    expires_at: undefined,
   }
 
   useEffect(() => {
@@ -89,8 +93,10 @@ function SettingsContent({}: SettingsContentProps) {
 
   const checkAuth = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
       if (!session) {
         router.push('/onboarding')
         return
@@ -100,7 +106,7 @@ function SettingsContent({}: SettingsContentProps) {
         id: session.user.id,
         email: session.user.email || '',
         created_at: session.user.created_at,
-        updated_at: session.user.updated_at || session.user.created_at
+        updated_at: session.user.updated_at || session.user.created_at,
       })
     } catch (error) {
       console.error('Auth check error:', error)
@@ -112,7 +118,7 @@ function SettingsContent({}: SettingsContentProps) {
     setLoading(true)
     try {
       // For now, use mock data
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 800))
       setProfile(mockProfile)
       setPlan(mockPlan)
       setReferralCode(mockReferral)
@@ -135,42 +141,23 @@ function SettingsContent({}: SettingsContentProps) {
     }
   }
 
-  const handleEditField = (field: string, currentValue: string) => {
-    setEditingField(field)
-    setTempValue(currentValue)
-  }
-
-  const handleSaveField = async (field: string) => {
-    if (!tempValue.trim()) {
-      errorToast('Field cannot be empty')
-      return
-    }
-
+  const handleSaveProfile = async (data: { full_name: string; phone: string }) => {
     try {
       // In a real app, this would update the backend
-      if (profile && field === 'full_name') {
-        setProfile({ ...profile, full_name: tempValue.trim() })
-      }
-      if (profile && field === 'phone') {
-        setProfile({ ...profile, phone: tempValue.trim() })
-      }
-      
-      setEditingField(null)
+      setProfile((prev) =>
+        prev ? { ...prev, full_name: data.full_name, phone: data.phone } : null
+      )
       successToast('Profile updated successfully')
     } catch (error) {
       console.error('Error updating profile:', error)
       errorToast('Failed to update profile')
+      throw error
     }
-  }
-
-  const handleCancelEdit = () => {
-    setEditingField(null)
-    setTempValue('')
   }
 
   const handleCopyReferralCode = async () => {
     if (!referralCode) return
-    
+
     try {
       await navigator.clipboard.writeText(referralCode.code)
       successToast('Referral code copied!')
@@ -181,23 +168,54 @@ function SettingsContent({}: SettingsContentProps) {
   }
 
   const handleUpgradePlan = () => {
-    // Would navigate to plan selection/payment flow
-    successToast('Upgrade to Pro or Enterprise for premium quality processing (1536x1024, HD) and additional features!')
+    successToast(
+      'Upgrade to Pro or Enterprise for premium quality processing (1536x1024, HD) and additional features!'
+    )
   }
 
-  const getPlanBadgeVariant = (planType: string) => {
-    switch (planType) {
-      case 'pro': return 'primary'
-      case 'enterprise': return 'success'
-      default: return 'neutral'
-    }
+  const handleBuyCredits = () => {
+    // Would navigate to credit purchase flow
+    successToast('Credit purchase flow coming soon!')
   }
 
-  const getPlanIcon = (planType: string) => {
-    switch (planType) {
-      case 'pro': return <Zap className="h-4 w-4" />
-      case 'enterprise': return <Crown className="h-4 w-4" />
-      default: return <Star className="h-4 w-4" />
+  const handlePreferenceChange = (key: keyof PreferencesState, value: boolean) => {
+    setPreferences((prev) => ({ ...prev, [key]: value }))
+    successToast('Preference updated')
+  }
+
+  const renderSection = () => {
+    switch (activeSection) {
+      case 'account':
+        return (
+          <AccountSection
+            user={user}
+            profile={profile}
+            onEditProfile={() => setIsProfileModalOpen(true)}
+            onSignOut={handleLogout}
+          />
+        )
+      case 'subscription':
+        return (
+          <SubscriptionSection
+            plan={plan}
+            credits={credits}
+            referralCode={referralCode}
+            onUpgrade={handleUpgradePlan}
+            onBuyCredits={handleBuyCredits}
+            onCopyReferralCode={handleCopyReferralCode}
+          />
+        )
+      case 'preferences':
+        return (
+          <PreferencesSection
+            preferences={preferences}
+            onPreferenceChange={handlePreferenceChange}
+          />
+        )
+      case 'support':
+        return <SupportSection appVersion={APP_VERSION} onSignOut={handleLogout} />
+      default:
+        return null
     }
   }
 
@@ -216,301 +234,30 @@ function SettingsContent({}: SettingsContentProps) {
 
   return (
     <DesktopLayout title="Settings">
-      <div className="flex-1 overflow-auto">
-        <div className="max-w-4xl mx-auto p-6 space-y-8">
-          {/* Profile Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
-                Profile
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Full Name */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-neutral-700">
-                  Full Name
-                </label>
-                {editingField === 'full_name' ? (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1"
-                      autoFocus
-                    />
-                    <Button
-                      onClick={() => handleSaveField('full_name')}
-                      variant="primary"
-                                         >
-                      Save
-                    </Button>
-                    <Button
-                      onClick={handleCancelEdit}
-                      variant="ghost"
-                                         >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <span className="text-neutral-900">
-                      {profile?.full_name || 'Not set'}
-                    </span>
-                    <Button
-                      onClick={() => handleEditField('full_name', profile?.full_name || '')}
-                      variant="ghost"
-                                         >
-                      Edit
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Email */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-neutral-700">
-                  Email Address
-                </label>
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-neutral-400" />
-                  <span className="text-neutral-900">{user?.email}</span>
-                  <Badge variant="success">Verified</Badge>
-                </div>
-              </div>
-
-              {/* Phone */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-neutral-700">
-                  Phone Number
-                </label>
-                {editingField === 'phone' ? (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={tempValue}
-                      onChange={(e) => setTempValue(e.target.value)}
-                      className="flex-1"
-                      type="tel"
-                      autoFocus
-                    />
-                    <Button
-                      onClick={() => handleSaveField('phone')}
-                      variant="primary"
-                                         >
-                      Save
-                    </Button>
-                    <Button
-                      onClick={handleCancelEdit}
-                      variant="ghost"
-                                         >
-                      Cancel
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Phone className="h-4 w-4 text-neutral-400" />
-                      <span className="text-neutral-900">
-                        {profile?.phone || 'Not set'}
-                      </span>
-                    </div>
-                    <Button
-                      onClick={() => handleEditField('phone', profile?.phone || '')}
-                      variant="ghost"
-                                         >
-                      Edit
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Plan & Credits */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CreditCard className="h-5 w-5" />
-                Plan & Credits
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Current Plan */}
-              <div className="flex items-center justify-between p-3 bg-neutral-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center">
-                    {plan && getPlanIcon(plan.plan_type)}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-neutral-900 capitalize">
-                        {plan?.plan_type || 'Free'} Plan
-                      </span>
-                      {plan && (
-                        <Badge variant={getPlanBadgeVariant(plan.plan_type) as any}>
-                          {plan.plan_type === 'free' ? 'Current' : 'Active'}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-neutral-600">
-                      {plan?.credits_included} credits included monthly • {plan?.plan_type === 'free' ? 'Standard quality (1024x1024)' : 'Premium quality (1536x1024, HD)'}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={handleUpgradePlan}
-                  variant="primary"
-                                   rightIcon={<ChevronRight className="h-4 w-4" />}
-                >
-                  Upgrade
-                </Button>
-              </div>
-
-              {/* Credits Balance */}
-              <div className="flex items-center justify-between p-3 bg-primary-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                    <Zap className="h-5 w-5 text-primary-600" />
-                  </div>
-                  <div>
-                    <span className="font-medium text-primary-900">
-                      {credits} Credits
-                    </span>
-                    <p className="text-sm text-primary-700">
-                      Available for enhancement
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  variant="primary"
-                                 >
-                  Buy More
-                </Button>
-              </div>
-
-              {/* Plan Features */}
-              {plan && (
-                <div className="space-y-2">
-                  <h4 className="text-sm font-medium text-neutral-900">Plan Features</h4>
-                  <div className="space-y-1">
-                    {plan.features.map((feature, index) => (
-                      <div key={index} className="flex items-center gap-2 text-sm text-neutral-600">
-                        <Shield className="h-3 w-3 text-success-600" />
-                        {feature}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Referral System */}
-          {referralCode && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Gift className="h-5 w-5" />
-                  Referral Program
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-4 bg-gradient-to-r from-primary-50 to-secondary-50 rounded-lg">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h4 className="font-medium text-neutral-900">Your Referral Code</h4>
-                        <p className="text-sm text-neutral-600">
-                          Share with friends to earn {referralCode.credits_reward} credits each
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 p-3 bg-white rounded-lg border">
-                        <code className="text-primary-600 font-mono font-medium">
-                          {referralCode.code}
-                        </code>
-                      </div>
-                      <Button
-                        onClick={handleCopyReferralCode}
-                        variant="primary"
-                                               leftIcon={<Copy className="h-4 w-4" />}
-                      >
-                        Copy
-                      </Button>
-                    </div>
-
-                    <div className="flex items-center justify-between text-sm text-neutral-600">
-                      <span>Uses: {referralCode.uses_count}/{referralCode.max_uses}</span>
-                      <span>Earned: {referralCode.uses_count * referralCode.credits_reward} credits</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Settings Options */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <SettingsIcon className="h-5 w-5" />
-                App Settings
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1">
-              <button className="w-full flex items-center justify-between p-3 hover:bg-neutral-50 rounded-lg transition-colors">
-                <div className="flex items-center gap-3">
-                  <Bell className="h-5 w-5 text-neutral-600" />
-                  <span className="text-neutral-900">Notifications</span>
-                </div>
-                <ChevronRight className="h-4 w-4 text-neutral-400" />
-              </button>
-
-              <button className="w-full flex items-center justify-between p-3 hover:bg-neutral-50 rounded-lg transition-colors">
-                <div className="flex items-center gap-3">
-                  <Lock className="h-5 w-5 text-neutral-600" />
-                  <span className="text-neutral-900">Privacy & Security</span>
-                </div>
-                <ChevronRight className="h-4 w-4 text-neutral-400" />
-              </button>
-
-              <button className="w-full flex items-center justify-between p-3 hover:bg-neutral-50 rounded-lg transition-colors">
-                <div className="flex items-center gap-3">
-                  <HelpCircle className="h-5 w-5 text-neutral-600" />
-                  <span className="text-neutral-900">Help & Support</span>
-                </div>
-                <ExternalLink className="h-4 w-4 text-neutral-400" />
-              </button>
-            </CardContent>
-          </Card>
-
-          {/* Sign Out */}
-          <Card>
-            <CardContent className="p-4">
-              <Button
-                onClick={handleLogout}
-                variant="ghost"
-                size="lg"
-                className="w-full text-error-600 hover:text-error-700 hover:bg-error-50"
-                leftIcon={<LogOut className="h-5 w-5" />}
-              >
-                Sign Out
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* App Info */}
-          <div className="text-center pb-8 space-y-2">
-            <p className="text-sm text-neutral-600">Luster AI v1.0.0</p>
-            <p className="text-xs text-neutral-500">
-              Made with ❤️ for real estate professionals
-            </p>
-          </div>
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        {/* Mobile Tabs - Sticky at top on mobile */}
+        <div className="lg:hidden sticky top-0 z-10">
+          <SettingsTabs activeSection={activeSection} onSectionChange={setActiveSection} />
         </div>
+
+        {/* Desktop Sidebar Navigation */}
+        <aside className="hidden lg:block w-72 flex-shrink-0 border-r border-neutral-200 bg-neutral-50 p-6">
+          <SettingsNav activeSection={activeSection} onSectionChange={setActiveSection} />
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-2xl mx-auto p-6 lg:py-8">{renderSection()}</div>
+        </main>
       </div>
+
+      {/* Profile Edit Modal */}
+      <ProfileEditModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        profile={profile}
+        onSave={handleSaveProfile}
+      />
     </DesktopLayout>
   )
 }

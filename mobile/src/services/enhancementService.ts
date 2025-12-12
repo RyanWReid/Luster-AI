@@ -14,10 +14,15 @@ async function getAuthToken(): Promise<string | null> {
 interface EnhanceImageParams {
   imageUrl: string
   style: 'luster' | 'flambient'
+  projectName?: string  // Name for new project (auto-generated if not provided)
+  shootId?: string      // Existing shoot ID (to add photos to existing project)
 }
 
 interface EnhanceResponse {
   job_id: string
+  shoot_id: string      // Backend shoot UUID
+  asset_id: string      // Backend asset UUID
+  project_name: string  // Actual project name used
   status: string
 }
 
@@ -244,10 +249,14 @@ class EnhancementService {
       const requestBody = {
         image: base64Image,
         style: params.style,
+        project_name: params.projectName,
+        shoot_id: params.shootId,
       }
       console.log('Request body prepared:', {
         imageLength: requestBody.image.length,
         style: requestBody.style,
+        project_name: requestBody.project_name,
+        shoot_id: requestBody.shoot_id,
       })
       
       console.log('Sending base64 request to:', `${API_BASE_URL}/api/mobile/enhance-base64`)

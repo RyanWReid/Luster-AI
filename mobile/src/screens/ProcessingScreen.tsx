@@ -250,12 +250,13 @@ export default function ProcessingScreen() {
         await new Promise((resolve) => setTimeout(resolve, 1000))
 
         const results: string[] = []
+        let shootId: string | null = null  // Track backend shoot ID for all photos in batch
 
         // Allow dismissing immediately
         setCanDismiss(true)
 
-        // Synthetic processing: 30 seconds divided by number of photos
-        const timePerPhoto = 30000 / photos.length // 30 seconds total
+        // Generate project name: "Project Dec 11"
+        const projectName = `Project ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
 
         for (let i = 0; i < photos.length; i++) {
           setCurrentStatus(`Enhancing photo ${i + 1} of ${photos.length}...`)
@@ -264,10 +265,28 @@ export default function ProcessingScreen() {
           try {
             // Call the actual enhancement API
             setCurrentStatus(`Photo ${i + 1}: Uploading...`)
+
+            // First photo creates new project, subsequent photos use same shoot_id
             const enhanceResult = await enhancementService.enhanceImage({
               imageUrl: photos[i],
               style: style as 'luster' | 'flambient',
+              projectName: i === 0 ? projectName : undefined,  // Only first photo sets name
+              shootId: shootId || undefined,  // Use existing shoot for subsequent photos
             })
+
+            // Store shoot_id from first photo response
+            if (i === 0 && enhanceResult.shoot_id) {
+              shootId = enhanceResult.shoot_id
+              console.log(`Created new project: ${enhanceResult.project_name} (${shootId})`)
+
+              // Update listing with backend shoot ID and project name
+              if (currentPropertyId) {
+                updateListing(currentPropertyId, {
+                  backendShootId: shootId,
+                  address: enhanceResult.project_name,
+                })
+              }
+            }
 
             // Poll for completion
             setCurrentStatus(`Photo ${i + 1}: Enhancing with AI...`)

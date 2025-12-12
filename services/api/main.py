@@ -133,6 +133,8 @@ def convert_to_jpg(input_path: str, output_path: str, quality: int = 95) -> None
 class Base64ImageRequest(BaseModel):
     image: str  # Base64 encoded image
     style: str = "luster"
+    project_name: Optional[str] = None  # Name for new project (auto-generated if not provided)
+    shoot_id: Optional[str] = None  # Existing shoot ID (to add photos to existing project)
 
 
 @app.get("/health")
@@ -914,19 +916,42 @@ async def mobile_enhance_base64(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
 
-    mobile_shoot = db.query(Shoot).filter(
-        Shoot.user_id == user.id,
-        Shoot.name == "Mobile Uploads"
-    ).first()
-    
-    if not mobile_shoot:
+    # Handle shoot: use existing, or create new project
+    mobile_shoot = None
+
+    if request.shoot_id:
+        # Adding to existing project
+        mobile_shoot = db.query(Shoot).filter(
+            Shoot.id == request.shoot_id,
+            Shoot.user_id == user.id
+        ).first()
+        if not mobile_shoot:
+            raise HTTPException(status_code=404, detail="Project not found")
+        print(f"Adding to existing project: {mobile_shoot.name} ({mobile_shoot.id})")
+    else:
+        # Create new project
+        project_name = request.project_name
+        if not project_name:
+            # Auto-generate name: "Project Dec 11"
+            project_name = f"Project {datetime.now().strftime('%b %d')}"
+
+        # Check for duplicate names and add suffix if needed
+        existing_count = db.query(Shoot).filter(
+            Shoot.user_id == user.id,
+            Shoot.name.like(f"{project_name}%")
+        ).count()
+
+        if existing_count > 0:
+            project_name = f"{project_name} ({existing_count + 1})"
+
         mobile_shoot = Shoot(
             id=str(uuid.uuid4()),
             user_id=user.id,
-            name="Mobile Uploads"
+            name=project_name
         )
         db.add(mobile_shoot)
         db.flush()
+        print(f"Created new project: {mobile_shoot.name} ({mobile_shoot.id})")
     
     # Save image data temporarily
     temp_filename = f"mobile_{uuid.uuid4()}_temp"
@@ -1020,11 +1045,14 @@ async def mobile_enhance_base64(
     )
     db.add(event)
     db.commit()
-    
+
     print(f"Job created: {job.id}")
-    
+
     return {
         "job_id": str(job.id),
+        "shoot_id": str(mobile_shoot.id),
+        "asset_id": str(asset.id),
+        "project_name": mobile_shoot.name,
         "status": "queued",
         "message": "Enhancement job created successfully"
     }

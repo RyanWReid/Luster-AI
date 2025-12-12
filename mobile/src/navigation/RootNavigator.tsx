@@ -13,6 +13,8 @@ import ResultScreen from '../screens/ResultScreen'
 import ProjectScreen from '../screens/ProjectScreen'
 import CreditsScreen from '../screens/CreditsScreen'
 import AllPropertiesScreen from '../screens/AllPropertiesScreen'
+import PrivacySecurityScreen from '../screens/PrivacySecurityScreen'
+import AccountSettingsScreen from '../screens/AccountSettingsScreen'
 import MainTabs from './MainTabs'
 
 export type RootStackParamList = {
@@ -28,6 +30,8 @@ export type RootStackParamList = {
   Project: { property?: any }
   Credits: undefined
   AllProperties: undefined
+  PrivacySecurity: undefined
+  AccountSettings: undefined
 }
 
 const Stack = createStackNavigator<RootStackParamList>()
@@ -53,6 +57,8 @@ export default function RootNavigator() {
             <Stack.Screen name="Project" component={ProjectScreen} />
             <Stack.Screen name="Credits" component={CreditsScreen} />
             <Stack.Screen name="AllProperties" component={AllPropertiesScreen} />
+            <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
+            <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
           </>
         ) : (
           <>

@@ -8,27 +8,25 @@ import {
   Switch,
   Animated,
   Alert,
+  Image,
+  Dimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
-import Svg, { Path, Circle } from 'react-native-svg'
+import Svg, { Path, Circle, Rect } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { useAuth } from '../context/AuthContext'
+import { usePhotos } from '../context/PhotoContext'
 
-// Icon components
-const ChevronRightIcon = ({ color = '#C7C7CC' }) => (
-  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M9 18l6-6-6-6"
-      stroke={color}
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-)
+const { width: screenWidth } = Dimensions.get('window')
 
+// Brand colors
+const GOLD = '#D4AF37'
+const GOLD_LIGHT = 'rgba(212, 175, 55, 0.1)'
+const GOLD_MEDIUM = 'rgba(212, 175, 55, 0.15)'
+
+// Icons
 const BackIcon = ({ color = '#000' }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Path
@@ -41,8 +39,39 @@ const BackIcon = ({ color = '#000' }) => (
   </Svg>
 )
 
-// Settings icons
-const NotificationIcon = ({ color = '#000' }) => (
+const ChevronRightIcon = ({ color = '#C7C7CC' }) => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M9 18l6-6-6-6"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+const UserIcon = ({ color = GOLD }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"
+      stroke={color}
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Circle cx="12" cy="7" r="4" stroke={color} strokeWidth="1.5" />
+  </Svg>
+)
+
+const CreditCardIcon = ({ color = GOLD }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Rect x="2" y="5" width="20" height="14" rx="2" stroke={color} strokeWidth="1.5" />
+    <Path d="M2 10h20" stroke={color} strokeWidth="1.5" />
+  </Svg>
+)
+
+const BellIcon = ({ color = GOLD }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path
       d="M18 8A6 6 0 106 8c0 7-3 9-3 9h18s-3-2-3-9zM13.73 21a2 2 0 01-3.46 0"
@@ -54,7 +83,15 @@ const NotificationIcon = ({ color = '#000' }) => (
   </Svg>
 )
 
-const SecurityIcon = ({ color = '#000' }) => (
+const ImageIcon = ({ color = GOLD }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Rect x="3" y="3" width="18" height="18" rx="2" stroke={color} strokeWidth="1.5" />
+    <Circle cx="8.5" cy="8.5" r="1.5" fill={color} />
+    <Path d="M21 15l-5-5L5 21" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </Svg>
+)
+
+const ShieldIcon = ({ color = GOLD }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Path
       d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"
@@ -66,7 +103,7 @@ const SecurityIcon = ({ color = '#000' }) => (
   </Svg>
 )
 
-const HelpIcon = ({ color = '#000' }) => (
+const HelpIcon = ({ color = GOLD }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="1.5" />
     <Path
@@ -79,7 +116,7 @@ const HelpIcon = ({ color = '#000' }) => (
   </Svg>
 )
 
-const AboutIcon = ({ color = '#000' }) => (
+const InfoIcon = ({ color = GOLD }) => (
   <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth="1.5" />
     <Path
@@ -92,37 +129,73 @@ const AboutIcon = ({ color = '#000' }) => (
   </Svg>
 )
 
-const StarIcon = ({ size = 24, color = '#D4AF37' }: { size?: number; color?: string }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
-    <Path d="M12 2l2.582 7.953h8.364l-6.764 4.914 2.582 7.953L12 17.906 5.236 22.82l2.582-7.953L1.054 9.953h8.364L12 2z" />
+const LogOutIcon = ({ color = '#8E8E93' }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
+      stroke={color}
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+const SparkleIcon = ({ color = GOLD }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 3v2M12 19v2M5.64 5.64l1.41 1.41M16.95 16.95l1.41 1.41M3 12h2M19 12h2M5.64 18.36l1.41-1.41M16.95 7.05l1.41-1.41"
+      stroke={color}
+      strokeWidth="1.5"
+      strokeLinecap="round"
+    />
+    <Circle cx="12" cy="12" r="4" stroke={color} strokeWidth="1.5" />
+  </Svg>
+)
+
+const ExternalLinkIcon = ({ color = '#C7C7CC' }) => (
+  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </Svg>
 )
 
 interface SettingRowProps {
   icon: React.ReactNode
   title: string
-  value?: string
+  subtitle?: string
+  value?: string | React.ReactNode
   onPress?: () => void
   showArrow?: boolean
+  showExternal?: boolean
   toggle?: boolean
   toggleValue?: boolean
   onToggleChange?: (value: boolean) => void
+  isLast?: boolean
 }
 
 const SettingRow = ({
   icon,
   title,
+  subtitle,
   value,
   onPress,
   showArrow = true,
+  showExternal = false,
   toggle = false,
   toggleValue = false,
   onToggleChange,
+  isLast = false,
 }: SettingRowProps) => {
   const scaleAnim = React.useRef(new Animated.Value(1)).current
 
   const handlePressIn = () => {
-    if (!toggle) {
+    if (!toggle && onPress) {
       Animated.spring(scaleAnim, {
         toValue: 0.98,
         friction: 8,
@@ -133,7 +206,7 @@ const SettingRow = ({
   }
 
   const handlePressOut = () => {
-    if (!toggle) {
+    if (!toggle && onPress) {
       Animated.spring(scaleAnim, {
         toValue: 1,
         friction: 8,
@@ -144,28 +217,38 @@ const SettingRow = ({
   }
 
   return (
-    <Animated.View style={[styles.settingRow, { transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
       <TouchableOpacity
-        style={styles.settingTouchable}
+        style={[styles.settingRow, !isLast && styles.settingRowBorder]}
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         activeOpacity={toggle ? 1 : 0.7}
-        disabled={toggle}
+        disabled={toggle && !onPress}
       >
         <View style={styles.settingLeft}>
           <View style={styles.iconContainer}>{icon}</View>
-          <Text style={styles.settingTitle}>{title}</Text>
+          <View style={styles.settingTextContainer}>
+            <Text style={styles.settingTitle}>{title}</Text>
+            {subtitle && <Text style={styles.settingSubtitle}>{subtitle}</Text>}
+          </View>
         </View>
         <View style={styles.settingRight}>
-          {value && <Text style={styles.settingValue}>{value}</Text>}
+          {value && typeof value === 'string' ? (
+            <Text style={styles.settingValue}>{value}</Text>
+          ) : value ? (
+            value
+          ) : null}
           {toggle ? (
             <Switch
               value={toggleValue}
               onValueChange={onToggleChange}
-              trackColor={{ false: '#E5E5EA', true: '#D4AF37' }}
+              trackColor={{ false: '#E5E5EA', true: GOLD }}
               thumbColor="#FFFFFF"
+              ios_backgroundColor="#E5E5EA"
             />
+          ) : showExternal ? (
+            <ExternalLinkIcon />
           ) : (
             showArrow && <ChevronRightIcon />
           )}
@@ -175,34 +258,53 @@ const SettingRow = ({
   )
 }
 
+interface SectionProps {
+  title?: string
+  children: React.ReactNode
+}
+
+const Section = ({ title, children }: SectionProps) => (
+  <View style={styles.section}>
+    {title && <Text style={styles.sectionTitle}>{title}</Text>}
+    <View style={styles.sectionCard}>{children}</View>
+  </View>
+)
+
 export default function SettingsScreen() {
   const navigation = useNavigation()
   const { user, signOut } = useAuth()
+  const { creditBalance } = usePhotos()
   const [notifications, setNotifications] = useState(true)
-  const [autoEnhance, setAutoEnhance] = useState(false)
-  const [highQuality, setHighQuality] = useState(true)
 
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
-      'Are you sure you want to sign out?',
+      'Are you sure you want to sign out of your account?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Sign Out',
-          style: 'destructive',
+          style: 'default',
           onPress: () => signOut(),
         },
       ],
-      { cancelable: false }
+      { cancelable: true }
     )
+  }
+
+  // Get user initials
+  const getInitials = () => {
+    if (user?.email) {
+      return user.email[0].toUpperCase()
+    }
+    return 'U'
   }
 
   return (
     <View style={styles.container}>
-      {/* Background gradient */}
+      {/* Background */}
       <LinearGradient
-        colors={['#FFFFFF', '#F8F8FA', '#F0F0F5']}
+        colors={['#FAFAFA', '#F5F5F7', '#FFFFFF']}
         style={styles.backgroundGradient}
       />
 
@@ -220,113 +322,139 @@ export default function SettingsScreen() {
           <View style={styles.headerSpacer} />
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.content}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.content}
+          contentContainerStyle={styles.contentContainer}
+        >
           {/* Profile Section */}
-          <View style={styles.profileSection}>
-            <BlurView intensity={30} tint="light" style={styles.profileCard}>
-              <View style={styles.profileAvatar}>
-                <StarIcon size={32} />
+          <TouchableOpacity
+            style={styles.profileCard}
+            activeOpacity={0.8}
+            onPress={() => Alert.alert('Edit Profile', 'Profile editing coming soon!')}
+          >
+            <View style={styles.profileAvatar}>
+              <Text style={styles.profileInitials}>{getInitials()}</Text>
+            </View>
+            <View style={styles.profileInfo}>
+              <Text style={styles.profileName}>
+                {user?.email?.split('@')[0] || 'User'}
+              </Text>
+              <Text style={styles.profileEmail}>{user?.email || 'Not signed in'}</Text>
+            </View>
+            <ChevronRightIcon color="#C7C7CC" />
+          </TouchableOpacity>
+
+          {/* Credits Card */}
+          <TouchableOpacity
+            style={styles.creditsCard}
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Credits' as never)}
+          >
+            <LinearGradient
+              colors={['#1C1C1E', '#2C2C2E']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.creditsGradient}
+            >
+              <View style={styles.creditsContent}>
+                <View style={styles.creditsLeft}>
+                  <Text style={styles.creditsLabel}>Available Credits</Text>
+                  <View style={styles.creditsValueRow}>
+                    <Text style={styles.creditsValue}>{creditBalance ?? 0}</Text>
+                    <View style={styles.creditsBadge}>
+                      <SparkleIcon color="#FFF" />
+                    </View>
+                  </View>
+                  <Text style={styles.creditsSubtext}>
+                    {creditBalance === 0 ? 'Get credits to enhance photos' : 'Ready to enhance'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.buyButton}
+                  onPress={() => navigation.navigate('Credits' as never)}
+                >
+                  <Text style={styles.buyButtonText}>Buy More</Text>
+                </TouchableOpacity>
               </View>
-              <View style={styles.profileInfo}>
-                <Text style={styles.profileName}>John Appleseed</Text>
-                <Text style={styles.profileEmail}>{user?.email || 'john@luster.ai'}</Text>
-              </View>
-            </BlurView>
-          </View>
+            </LinearGradient>
+          </TouchableOpacity>
 
-          {/* Settings Groups */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>PREFERENCES</Text>
-            <BlurView intensity={20} tint="light" style={styles.sectionCard}>
-              <SettingRow
-                icon={<NotificationIcon />}
-                title="Notifications"
-                toggle
-                toggleValue={notifications}
-                onToggleChange={setNotifications}
-              />
-              <View style={styles.separator} />
-              <SettingRow
-                icon={<StarIcon size={20} />}
-                title="Auto-Enhance"
-                toggle
-                toggleValue={autoEnhance}
-                onToggleChange={setAutoEnhance}
-              />
-              <View style={styles.separator} />
-              <SettingRow
-                icon={<StarIcon size={20} />}
-                title="High Quality Output"
-                toggle
-                toggleValue={highQuality}
-                onToggleChange={setHighQuality}
-              />
-            </BlurView>
-          </View>
+          {/* Preferences */}
+          <Section title="PREFERENCES">
+            <SettingRow
+              icon={<BellIcon />}
+              title="Push Notifications"
+              subtitle="Get notified when photos are ready"
+              toggle
+              toggleValue={notifications}
+              onToggleChange={setNotifications}
+              isLast
+            />
+          </Section>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>ACCOUNT</Text>
-            <BlurView intensity={20} tint="light" style={styles.sectionCard}>
-              <SettingRow
-                icon={<SecurityIcon />}
-                title="Privacy & Security"
-                onPress={() => Alert.alert('Privacy & Security', 'Coming soon')}
-              />
-              <View style={styles.separator} />
-              <SettingRow
-                icon={<StarIcon size={20} />}
-                title="Subscription"
-                value="Pro"
-                onPress={() => navigation.navigate('Credits' as never)}
-              />
-              <View style={styles.separator} />
-              <SettingRow
-                icon={<StarIcon size={20} />}
-                title="Usage History"
-                onPress={() => Alert.alert('Usage History', 'Coming soon')}
-              />
-            </BlurView>
-          </View>
+          {/* Account */}
+          <Section title="ACCOUNT">
+            <SettingRow
+              icon={<CreditCardIcon />}
+              title="Subscription"
+              value="Free"
+              onPress={() => navigation.navigate('Credits' as never)}
+            />
+            <SettingRow
+              icon={<ShieldIcon />}
+              title="Privacy & Security"
+              onPress={() => navigation.navigate('PrivacySecurity' as never)}
+            />
+            <SettingRow
+              icon={<UserIcon />}
+              title="Account Settings"
+              onPress={() => navigation.navigate('AccountSettings' as never)}
+              isLast
+            />
+          </Section>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>SUPPORT</Text>
-            <BlurView intensity={20} tint="light" style={styles.sectionCard}>
-              <SettingRow
-                icon={<HelpIcon />}
-                title="Help Center"
-                onPress={() => Alert.alert('Help Center', 'Coming soon')}
-              />
-              <View style={styles.separator} />
-              <SettingRow
-                icon={<AboutIcon />}
-                title="About Luster"
-                value="v1.0.0"
-                onPress={() => Alert.alert('Luster AI', 'Version 1.0.0\nEnhance your property listings')}
-              />
-            </BlurView>
-          </View>
+          {/* Support */}
+          <Section title="SUPPORT">
+            <SettingRow
+              icon={<HelpIcon />}
+              title="Help Center"
+              showExternal
+              onPress={() => Alert.alert('Help Center', 'Opening help center...')}
+            />
+            <SettingRow
+              icon={<InfoIcon />}
+              title="About Luster"
+              value="v1.0.0"
+              onPress={() =>
+                Alert.alert(
+                  'Luster AI',
+                  'Version 1.0.0\n\nProfessional photo enhancement for real estate.\n\nMade with ❤️ for real estate professionals.'
+                )
+              }
+              isLast
+            />
+          </Section>
 
-          {/* Sign Out Button */}
+          {/* Sign Out */}
           <TouchableOpacity
             style={styles.signOutButton}
             onPress={handleSignOut}
             activeOpacity={0.7}
           >
-            <BlurView intensity={30} tint="light" style={styles.signOutBlur}>
+            <View style={styles.signOutContent}>
+              <LogOutIcon />
               <Text style={styles.signOutText}>Sign Out</Text>
-            </BlurView>
+            </View>
           </TouchableOpacity>
 
-          <View style={styles.bottomSpacer} />
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Luster AI © 2024
+            </Text>
+          </View>
         </ScrollView>
-
-        {/* Bottom Fade Gradient */}
-        <LinearGradient
-          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0.95)', 'rgba(255,255,255,1)']}
-          locations={[0, 0.3, 0.7, 1]}
-          style={styles.bottomFadeGradient}
-          pointerEvents="none"
-        />
       </SafeAreaView>
     </View>
   )
@@ -352,12 +480,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(0,0,0,0.1)',
+    paddingVertical: 12,
   },
   backButton: {
     padding: 4,
+    marginLeft: -4,
   },
   headerTitle: {
     fontSize: 17,
@@ -371,67 +498,152 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  profileSection: {
+  contentContainer: {
     paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 20,
+    paddingBottom: 40,
   },
+
+  // Profile Card
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    padding: 16,
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   profileAvatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: GOLD_LIGHT,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  profileInitials: {
+    fontSize: 22,
+    fontWeight: '600',
+    color: GOLD,
+  },
   profileInfo: {
-    marginLeft: 16,
     flex: 1,
+    marginLeft: 14,
   },
   profileName: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     color: '#000',
-    letterSpacing: -0.4,
+    letterSpacing: -0.3,
   },
   profileEmail: {
     fontSize: 14,
-    color: '#666',
+    color: '#8E8E93',
     marginTop: 2,
   },
-  section: {
+
+  // Credits Card
+  creditsCard: {
+    marginTop: 16,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  creditsGradient: {
+    padding: 20,
+  },
+  creditsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  creditsLeft: {
+    flex: 1,
+  },
+  creditsLabel: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  creditsValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  creditsValue: {
+    fontSize: 36,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: -1,
+  },
+  creditsBadge: {
+    marginLeft: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: GOLD,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  creditsSubtext: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 4,
+  },
+  buyButton: {
+    backgroundColor: GOLD,
     paddingHorizontal: 20,
-    marginBottom: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  buyButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#000',
+  },
+
+  // Sections
+  section: {
+    marginTop: 28,
   },
   sectionTitle: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#666',
-    letterSpacing: 0.3,
+    color: '#8E8E93',
+    letterSpacing: 0.5,
     marginBottom: 8,
     marginLeft: 4,
   },
   sectionCard: {
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
+
+  // Setting Row
   settingRow: {
-    backgroundColor: 'transparent',
-  },
-  settingTouchable: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
+  },
+  settingRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
   },
   settingLeft: {
     flexDirection: 'row',
@@ -439,57 +651,68 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: GOLD_LIGHT,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  settingTextContainer: {
+    flex: 1,
   },
   settingTitle: {
     fontSize: 16,
     color: '#000',
     fontWeight: '400',
   },
+  settingSubtitle: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
   settingRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   settingValue: {
     fontSize: 15,
-    color: '#666',
-    marginRight: 8,
+    color: '#8E8E93',
   },
-  separator: {
-    height: 0.5,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    marginLeft: 56,
-  },
+
+  // Sign Out
   signOutButton: {
-    marginHorizontal: 20,
-    marginTop: 8,
-    marginBottom: 20,
-  },
-  signOutBlur: {
-    paddingVertical: 14,
+    marginTop: 32,
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  signOutContent: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 8,
   },
   signOutText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '500',
-    color: '#FF3B30',
+    color: '#8E8E93',
   },
-  bottomSpacer: {
-    height: 40,
+
+  // Footer
+  footer: {
+    marginTop: 24,
+    alignItems: 'center',
   },
-  bottomFadeGradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 80,
+  footerText: {
+    fontSize: 12,
+    color: '#C7C7CC',
   },
 })

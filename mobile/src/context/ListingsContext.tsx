@@ -8,6 +8,7 @@ export type PropertyStatus = 'processing' | 'ready' | 'completed' | 'failed'
 
 export interface PropertyListing {
   id: string
+  backendShootId?: string // Backend shoot UUID for syncing
   address: string
   price: string
   beds: number
@@ -126,8 +127,46 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
 
       if (backendListings.length > 0) {
         console.log(`✅ Synced ${backendListings.length} listings from backend`)
-        // Merge with local listings (backend is source of truth)
-        setListings(backendListings)
+
+        // Merge strategy: keep local listings, add new from backend, update existing
+        setListings(prev => {
+          // Get set of backend shoot IDs we already have locally
+          const existingBackendIds = new Set(
+            prev.map(l => l.backendShootId).filter(Boolean)
+          )
+
+          // Find new listings from backend that we don't have locally
+          const newFromBackend = backendListings.filter(
+            backend => !existingBackendIds.has(backend.id)
+          ).map(backend => ({
+            ...backend,
+            backendShootId: backend.id, // Map backend id to backendShootId
+          }))
+
+          // Update existing local listings with backend data (images, status)
+          const updatedLocal = prev.map(local => {
+            if (local.backendShootId) {
+              const backend = backendListings.find(b => b.id === local.backendShootId)
+              if (backend) {
+                // Update with backend data but keep local id
+                return {
+                  ...local,
+                  address: backend.address || local.address,
+                  images: backend.images || local.images,
+                  image: backend.image || local.image,
+                  status: backend.status === 'completed' ? 'completed' : local.status,
+                  isEnhanced: backend.isEnhanced ?? local.isEnhanced,
+                }
+              }
+            }
+            return local
+          })
+
+          // Combine: updated local + new from backend
+          const merged = [...updatedLocal, ...newFromBackend]
+          console.log(`📊 Merged: ${updatedLocal.length} local + ${newFromBackend.length} new = ${merged.length} total`)
+          return merged
+        })
       } else {
         console.log('No listings found on backend')
       }
