@@ -123,9 +123,15 @@ const mockProperties = [
 
 export default function DashboardScreenNew() {
   const navigation = useNavigation()
-  const { listings, isLoading: isLoadingListings, clearListings } = useListings()
+  const { listings, isLoading: isLoadingListings, clearListings, syncFromBackend } = useListings()
   const { creditBalance, isLoadingCredits } = usePhotos()
   const showMockData = false // Toggle this to true to show mock data cards
+
+  // Sync listings from backend on mount (restore after reinstall)
+  useEffect(() => {
+    console.log('🏠 DashboardScreenNew mounted - syncing listings from backend')
+    syncFromBackend()
+  }, [])
 
   // Use real listings if available, otherwise use mock data
   const displayData = listings.length > 0 ? listings : (showMockData ? mockProperties : [])

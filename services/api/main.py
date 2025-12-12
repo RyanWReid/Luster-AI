@@ -1132,7 +1132,7 @@ def mobile_get_listings(
     listings = []
 
     for shoot in shoots:
-        # Get all succeeded jobs for this shoot
+        # Get all succeeded jobs for this shoot with their assets
         jobs = db.query(Job).join(Asset).filter(
             Asset.shoot_id == shoot.id,
             Job.status == JobStatus.succeeded,
@@ -1147,17 +1147,39 @@ def mobile_get_listings(
         if not first_asset:
             continue
 
-        # Build enhanced image URLs
+        # Build enhanced image URLs with presigned R2 URLs
         enhanced_images = []
         for job in jobs:
-            # Generate the full output URL
-            image_url = f"/outputs/{os.path.basename(job.output_path)}"
-            enhanced_images.append({"uri": image_url})
+            image_url = None
+            if R2_ENABLED and job.output_path and not job.output_path.startswith('/'):
+                try:
+                    # Get asset for filename
+                    asset = db.query(Asset).filter(Asset.id == job.asset_id).first()
+                    filename = f"enhanced_{asset.original_filename}" if asset else "enhanced.jpg"
+                    image_url = r2_client.generate_presigned_download_url(
+                        object_key=job.output_path,
+                        expiration=3600,
+                        filename=filename,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to generate presigned URL for job {job.id}: {e}")
+                    image_url = f"/outputs/{os.path.basename(job.output_path)}"
+            else:
+                image_url = f"/outputs/{os.path.basename(job.output_path)}"
+
+            if image_url:
+                enhanced_images.append({"uri": image_url})
+
+        # Use shoot name, but provide better fallback for "Mobile Uploads"
+        address = shoot.name
+        if not address or address == "Mobile Uploads":
+            # Use first asset filename as address, cleaned up
+            address = first_asset.original_filename.replace('.jpg', '').replace('.heic', '').replace('.jpeg', '').replace('_', ' ').title()
 
         # Create listing object
         listing = {
             "id": shoot.id,
-            "address": shoot.name or first_asset.original_filename.replace('.jpg', '').replace('.heic', ''),
+            "address": address,
             "price": "",  # Not stored in DB yet
             "beds": 0,  # Not stored in DB yet
             "baths": 0,  # Not stored in DB yet
