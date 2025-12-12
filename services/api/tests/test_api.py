@@ -1,17 +1,19 @@
 """
 API endpoint tests
+
+Note: Most endpoints require authentication. Tests use:
+- `client` - No authentication (for public endpoints like /health)
+- `authenticated_client` - Mocked JWT auth with TEST_USER_ID
 """
 
-import json
-import tempfile
 import uuid
 from io import BytesIO
-from unittest.mock import patch
 
 import pytest
 from PIL import Image
 
-from database import Asset, Credit, Job, JobStatus, Shoot, User
+from database import Asset, Credit, Job, JobStatus, Shoot
+from tests.conftest import TEST_USER_ID
 
 
 class TestHealthEndpoint:
@@ -19,19 +21,23 @@ class TestHealthEndpoint:
 
     @pytest.mark.unit
     def test_health_check(self, client):
-        """Test health endpoint returns 200"""
+        """Test health endpoint returns 200 with service status"""
         response = client.get("/health")
         assert response.status_code == 200
-        assert response.json() == {"status": "healthy"}
+        data = response.json()
+        assert data["status"] == "healthy"
+        # Health check now includes service details
+        assert "services" in data
+        assert data["services"]["database"] == "healthy"
 
 
 class TestShootEndpoints:
     """Test shoot-related endpoints"""
 
     @pytest.mark.api
-    def test_create_shoot(self, client, test_db):
+    def test_create_shoot(self, authenticated_client, test_db, test_user):
         """Test creating a new shoot"""
-        response = client.post("/shoots", data={"name": "Test Shoot"})
+        response = authenticated_client.post("/shoots", data={"name": "Test Shoot"})
         assert response.status_code == 200
 
         data = response.json()
@@ -44,20 +50,20 @@ class TestShootEndpoints:
         assert str(shoot.id) == data["id"]
 
     @pytest.mark.api
-    def test_create_shoot_empty_name(self, client):
+    def test_create_shoot_empty_name(self, authenticated_client, test_user):
         """Test creating shoot with empty name fails"""
-        response = client.post("/shoots", data={"name": ""})
+        response = authenticated_client.post("/shoots", data={"name": ""})
         assert response.status_code == 422  # Validation error
 
     @pytest.mark.api
-    def test_get_shoot_assets_empty(self, client, test_db):
+    def test_get_shoot_assets_empty(self, authenticated_client, test_db, test_user):
         """Test getting assets for a shoot with no assets"""
-        # Create a shoot first
-        shoot = Shoot(user_id="550e8400-e29b-41d4-a716-446655440000", name="Test Shoot")
+        # Create a shoot for the test user
+        shoot = Shoot(user_id=TEST_USER_ID, name="Test Shoot")
         test_db.add(shoot)
         test_db.commit()
 
-        response = client.get(f"/shoots/{shoot.id}/assets")
+        response = authenticated_client.get(f"/shoots/{shoot.id}/assets")
         assert response.status_code == 200
 
         data = response.json()
@@ -66,10 +72,10 @@ class TestShootEndpoints:
         assert data["assets"] == []
 
     @pytest.mark.api
-    def test_get_nonexistent_shoot_assets(self, client):
+    def test_get_nonexistent_shoot_assets(self, authenticated_client, test_user):
         """Test getting assets for non-existent shoot"""
         fake_id = str(uuid.uuid4())
-        response = client.get(f"/shoots/{fake_id}/assets")
+        response = authenticated_client.get(f"/shoots/{fake_id}/assets")
         assert response.status_code == 404
 
 
@@ -85,17 +91,19 @@ class TestUploadEndpoints:
         return img_bytes
 
     @pytest.mark.api
-    def test_upload_file_success(self, client, test_db, temp_uploads_dir):
+    def test_upload_file_success(
+        self, authenticated_client, test_db, test_user, temp_uploads_dir
+    ):
         """Test successful file upload"""
-        # Create a shoot first
-        shoot = Shoot(user_id="550e8400-e29b-41d4-a716-446655440000", name="Test Shoot")
+        # Create a shoot for the test user
+        shoot = Shoot(user_id=TEST_USER_ID, name="Test Shoot")
         test_db.add(shoot)
         test_db.commit()
 
         # Create test image
         img_data = self.create_test_image_file()
 
-        response = client.post(
+        response = authenticated_client.post(
             "/uploads",
             data={"shoot_id": str(shoot.id)},
             files={"file": ("test.jpg", img_data, "image/jpeg")},
@@ -115,12 +123,14 @@ class TestUploadEndpoints:
         assert asset.shoot_id == shoot.id
 
     @pytest.mark.api
-    def test_upload_file_nonexistent_shoot(self, client, temp_uploads_dir):
+    def test_upload_file_nonexistent_shoot(
+        self, authenticated_client, test_user, temp_uploads_dir
+    ):
         """Test upload with non-existent shoot ID"""
         fake_shoot_id = str(uuid.uuid4())
         img_data = self.create_test_image_file()
 
-        response = client.post(
+        response = authenticated_client.post(
             "/uploads",
             data={"shoot_id": fake_shoot_id},
             files={"file": ("test.jpg", img_data, "image/jpeg")},
@@ -130,14 +140,16 @@ class TestUploadEndpoints:
         assert "Shoot not found" in response.json()["detail"]
 
     @pytest.mark.api
-    def test_upload_empty_file(self, client, test_db, temp_uploads_dir):
+    def test_upload_empty_file(
+        self, authenticated_client, test_db, test_user, temp_uploads_dir
+    ):
         """Test upload with empty file"""
-        # Create a shoot first
-        shoot = Shoot(user_id="550e8400-e29b-41d4-a716-446655440000", name="Test Shoot")
+        # Create a shoot for the test user
+        shoot = Shoot(user_id=TEST_USER_ID, name="Test Shoot")
         test_db.add(shoot)
         test_db.commit()
 
-        response = client.post(
+        response = authenticated_client.post(
             "/uploads",
             data={"shoot_id": str(shoot.id)},
             files={"file": ("empty.jpg", BytesIO(b""), "image/jpeg")},
@@ -151,23 +163,20 @@ class TestJobEndpoints:
     """Test job-related endpoints"""
 
     @pytest.mark.api
-    def test_create_job_success(self, client, test_db):
+    def test_create_job_success(self, authenticated_client, test_db, test_user):
         """Test successful job creation"""
-        # Setup: create user with credits, shoot, and asset
-        user_id = "550e8400-e29b-41d4-a716-446655440000"
-
-        # Create credit record
-        credit = Credit(user_id=user_id, balance=10)
+        # Create credit record for test user
+        credit = Credit(user_id=TEST_USER_ID, balance=10)
         test_db.add(credit)
 
         # Create shoot and asset
-        shoot = Shoot(user_id=user_id, name="Test Shoot")
+        shoot = Shoot(user_id=TEST_USER_ID, name="Test Shoot")
         test_db.add(shoot)
         test_db.flush()
 
         asset = Asset(
             shoot_id=shoot.id,
-            user_id=user_id,
+            user_id=TEST_USER_ID,
             original_filename="test.jpg",
             file_path="/fake/path/test.jpg",
             file_size=1000,
@@ -176,7 +185,7 @@ class TestJobEndpoints:
         test_db.add(asset)
         test_db.commit()
 
-        response = client.post(
+        response = authenticated_client.post(
             "/jobs",
             data={
                 "asset_id": str(asset.id),
@@ -200,22 +209,22 @@ class TestJobEndpoints:
         assert job.status == JobStatus.queued
 
     @pytest.mark.api
-    def test_create_job_insufficient_credits(self, client, test_db):
+    def test_create_job_insufficient_credits(
+        self, authenticated_client, test_db, test_user
+    ):
         """Test job creation with insufficient credits"""
-        user_id = "550e8400-e29b-41d4-a716-446655440000"
-
         # Create credit record with 0 balance
-        credit = Credit(user_id=user_id, balance=0)
+        credit = Credit(user_id=TEST_USER_ID, balance=0)
         test_db.add(credit)
 
         # Create shoot and asset
-        shoot = Shoot(user_id=user_id, name="Test Shoot")
+        shoot = Shoot(user_id=TEST_USER_ID, name="Test Shoot")
         test_db.add(shoot)
         test_db.flush()
 
         asset = Asset(
             shoot_id=shoot.id,
-            user_id=user_id,
+            user_id=TEST_USER_ID,
             original_filename="test.jpg",
             file_path="/fake/path/test.jpg",
             file_size=1000,
@@ -224,7 +233,7 @@ class TestJobEndpoints:
         test_db.add(asset)
         test_db.commit()
 
-        response = client.post(
+        response = authenticated_client.post(
             "/jobs", data={"asset_id": str(asset.id), "prompt": "Test prompt"}
         )
 
@@ -232,18 +241,16 @@ class TestJobEndpoints:
         assert "Insufficient credits" in response.json()["detail"]
 
     @pytest.mark.api
-    def test_get_job_success(self, client, test_db):
+    def test_get_job_success(self, authenticated_client, test_db, test_user):
         """Test getting job details"""
-        # Setup job
-        user_id = "550e8400-e29b-41d4-a716-446655440000"
-
-        shoot = Shoot(user_id=user_id, name="Test Shoot")
+        # Setup job for test user
+        shoot = Shoot(user_id=TEST_USER_ID, name="Test Shoot")
         test_db.add(shoot)
         test_db.flush()
 
         asset = Asset(
             shoot_id=shoot.id,
-            user_id=user_id,
+            user_id=TEST_USER_ID,
             original_filename="test.jpg",
             file_path="/fake/path/test.jpg",
             file_size=1000,
@@ -254,14 +261,14 @@ class TestJobEndpoints:
 
         job = Job(
             asset_id=asset.id,
-            user_id=user_id,
+            user_id=TEST_USER_ID,
             prompt="Test prompt",
             status=JobStatus.queued,
         )
         test_db.add(job)
         test_db.commit()
 
-        response = client.get(f"/jobs/{job.id}")
+        response = authenticated_client.get(f"/jobs/{job.id}")
         assert response.status_code == 200
 
         data = response.json()
@@ -272,10 +279,10 @@ class TestJobEndpoints:
         assert "updated_at" in data
 
     @pytest.mark.api
-    def test_get_nonexistent_job(self, client):
+    def test_get_nonexistent_job(self, authenticated_client, test_user):
         """Test getting non-existent job"""
         fake_id = str(uuid.uuid4())
-        response = client.get(f"/jobs/{fake_id}")
+        response = authenticated_client.get(f"/jobs/{fake_id}")
         assert response.status_code == 404
 
 
@@ -283,20 +290,19 @@ class TestCreditsEndpoint:
     """Test credits-related endpoints"""
 
     @pytest.mark.api
-    def test_get_credits_with_balance(self, client, test_db):
+    def test_get_credits_with_balance(self, authenticated_client, test_db, test_user):
         """Test getting credits when user has balance"""
-        user_id = "550e8400-e29b-41d4-a716-446655440000"
-        credit = Credit(user_id=user_id, balance=50)
+        credit = Credit(user_id=TEST_USER_ID, balance=50)
         test_db.add(credit)
         test_db.commit()
 
-        response = client.get("/credits")
+        response = authenticated_client.get("/credits")
         assert response.status_code == 200
         assert response.json() == {"balance": 50}
 
     @pytest.mark.api
-    def test_get_credits_no_record(self, client, test_db):
+    def test_get_credits_no_record(self, authenticated_client, test_db, test_user):
         """Test getting credits when no record exists"""
-        response = client.get("/credits")
+        response = authenticated_client.get("/credits")
         assert response.status_code == 200
         assert response.json() == {"balance": 0}

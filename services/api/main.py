@@ -10,7 +10,7 @@ from typing import Optional
 
 import sentry_sdk
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from PIL import Image
@@ -23,6 +23,9 @@ from sqlalchemy.orm import Session
 
 # Register HEIF opener so PIL can handle HEIC files
 register_heif_opener()
+
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from admin import router as admin_router
 from auth import get_current_user, get_optional_user
@@ -37,6 +40,7 @@ from logger import (
     log_upload_started,
     logger,
 )
+from rate_limiter import RATE_LIMITS, limiter, rate_limit_exceeded_handler
 from revenue_cat import router as revenuecat_router
 
 # Import R2 client for presigned URLs
@@ -75,6 +79,10 @@ else:
     logger.warning("SENTRY_DSN not set, Sentry not initialized")
 
 app = FastAPI(title="Luster AI API", version="1.0.0")
+
+# Add rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Include routers
 app.include_router(auth_router)  # Authentication endpoints
@@ -455,14 +463,16 @@ async def upload_file(
 
 
 @app.post("/jobs")
+@limiter.limit(RATE_LIMITS["job_create"])
 def create_job(
+    request: Request,
     asset_id: str = Form(...),
     prompt: str = Form(...),
     tier: str = Form("premium"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Create a new processing job"""
+    """Create a new processing job (rate limited: 10/minute)"""
 
     # Validate asset exists and belongs to user
     asset = (
@@ -820,13 +830,15 @@ def mobile_test():
 
 
 @app.post("/api/mobile/enhance")
+@limiter.limit(RATE_LIMITS["job_create"])
 async def mobile_enhance(
+    request: Request,
     image: UploadFile = File(...),
     style: str = Form("luster"),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Mobile endpoint to start image enhancement (requires authentication)"""
+    """Mobile endpoint to start image enhancement (rate limited: 10/minute)"""
 
     print(f"\n=== MOBILE ENHANCE DEBUG ===")
     print(f"Style: {style}")
@@ -971,21 +983,23 @@ async def mobile_enhance(
 
 
 @app.post("/api/mobile/enhance-base64")
+@limiter.limit(RATE_LIMITS["job_create"])
 async def mobile_enhance_base64(
-    request: Base64ImageRequest,
+    request: Request,
+    body: Base64ImageRequest,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Mobile endpoint to enhance image from base64 data (requires authentication)"""
+    """Mobile endpoint to enhance image from base64 data (rate limited: 10/minute)"""
 
     print(f"\n=== MOBILE ENHANCE BASE64 DEBUG ===")
-    print(f"Style: {request.style}")
-    print(f"Image data length: {len(request.image)} chars")
+    print(f"Style: {body.style}")
+    print(f"Image data length: {len(body.image)} chars")
     print(f"User: {user.id}")
 
     # Decode base64 image
     try:
-        image_data = base64.b64decode(request.image)
+        image_data = base64.b64decode(body.image)
         print(f"Decoded image size: {len(image_data)} bytes")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
@@ -993,11 +1007,11 @@ async def mobile_enhance_base64(
     # Handle shoot: use existing, or create new project
     mobile_shoot = None
 
-    if request.shoot_id:
+    if body.shoot_id:
         # Adding to existing project
         mobile_shoot = (
             db.query(Shoot)
-            .filter(Shoot.id == request.shoot_id, Shoot.user_id == user.id)
+            .filter(Shoot.id == body.shoot_id, Shoot.user_id == user.id)
             .first()
         )
         if not mobile_shoot:
@@ -1005,7 +1019,7 @@ async def mobile_enhance_base64(
         print(f"Adding to existing project: {mobile_shoot.name} ({mobile_shoot.id})")
     else:
         # Create new project
-        project_name = request.project_name
+        project_name = body.project_name
         if not project_name:
             # Auto-generate name: "Project Dec 11"
             project_name = f"Project {datetime.now().strftime('%b %d')}"
@@ -1100,7 +1114,7 @@ async def mobile_enhance_base64(
     job = Job(
         asset_id=asset.id,
         user_id=user.id,
-        prompt=style_prompts.get(request.style, style_prompts["luster"]),
+        prompt=style_prompts.get(body.style, style_prompts["luster"]),
         status=JobStatus.queued,
         credits_used=1,
     )
@@ -1112,7 +1126,7 @@ async def mobile_enhance_base64(
         job_id=job.id,
         event_type="created",
         details=json.dumps(
-            {"source": "mobile_base64", "style": request.style, "credits_reserved": 1}
+            {"source": "mobile_base64", "style": body.style, "credits_reserved": 1}
         ),
     )
     db.add(event)
