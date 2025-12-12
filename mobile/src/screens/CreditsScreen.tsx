@@ -1405,7 +1405,7 @@ const styles = StyleSheet.create({
   bundlesRowContainer: {
     marginTop: 20,
   },
-  bundlesGrid: {
+  bundlesGridCompact: {
     flexDirection: 'row',
     gap: 12,
   },
@@ -1451,7 +1451,7 @@ const styles = StyleSheet.create({
     color: '#D4AF37',
     marginBottom: 4,
   },
-  bundlePricePerPhoto: {
+  bundlePricePerPhotoCompact: {
     fontSize: 11,
     fontWeight: '500',
     color: '#9CA3AF',

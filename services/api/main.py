@@ -24,11 +24,16 @@ from pillow_heif import register_heif_opener
 # Register HEIF opener so PIL can handle HEIC files
 register_heif_opener()
 
-from database import (Asset, Credit, Job, JobEvent, JobStatus, Shoot, User,
-                      get_db)
-from logger import (LoggingMiddleware, log_credit_transaction,
-                    log_health_check, log_job_created, log_upload_completed,
-                    log_upload_started, logger)
+from database import Asset, Credit, Job, JobEvent, JobStatus, Shoot, User, get_db
+from logger import (
+    LoggingMiddleware,
+    log_credit_transaction,
+    log_health_check,
+    log_job_created,
+    log_upload_completed,
+    log_upload_started,
+    logger,
+)
 from admin import router as admin_router
 from revenue_cat import router as revenuecat_router
 from auth import get_current_user, get_optional_user
@@ -37,6 +42,7 @@ from auth_endpoints import router as auth_router
 # Import R2 client for presigned URLs
 try:
     from s3_client import r2_client
+
     R2_ENABLED = True
     logger.info("R2 client initialized successfully")
 except Exception as e:
@@ -62,7 +68,9 @@ if sentry_dsn:
         profiles_sample_rate=0.1,  # Profile 10% of transactions
         send_default_pii=False,  # Don't send personally identifiable information
     )
-    logger.info(f"Sentry initialized with {os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.25')} trace sampling")
+    logger.info(
+        f"Sentry initialized with {os.getenv('SENTRY_TRACES_SAMPLE_RATE', '0.25')} trace sampling"
+    )
 else:
     logger.warning("SENTRY_DSN not set, Sentry not initialized")
 
@@ -111,30 +119,38 @@ def convert_to_jpg(input_path: str, output_path: str, quality: int = 95) -> None
         # Open image (PIL will use HEIF opener for HEIC files)
         with Image.open(input_path) as img:
             # Convert to RGB if needed (RGBA, P, etc.)
-            if img.mode in ('RGBA', 'LA', 'P'):
+            if img.mode in ("RGBA", "LA", "P"):
                 # Create white background for transparency
-                background = Image.new('RGB', img.size, (255, 255, 255))
-                if img.mode == 'P':
-                    img = img.convert('RGBA')
-                background.paste(img, mask=img.split()[-1] if img.mode in ('RGBA', 'LA') else None)
+                background = Image.new("RGB", img.size, (255, 255, 255))
+                if img.mode == "P":
+                    img = img.convert("RGBA")
+                background.paste(
+                    img, mask=img.split()[-1] if img.mode in ("RGBA", "LA") else None
+                )
                 img = background
-            elif img.mode != 'RGB':
-                img = img.convert('RGB')
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
 
             # Save as JPG
-            img.save(output_path, 'JPEG', quality=quality, optimize=True)
+            img.save(output_path, "JPEG", quality=quality, optimize=True)
             print(f"Converted {input_path} to JPG: {output_path}")
     except Exception as e:
         print(f"Error converting image: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to process image: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to process image: {str(e)}"
+        )
 
 
 # Pydantic models for mobile API
 class Base64ImageRequest(BaseModel):
     image: str  # Base64 encoded image
     style: str = "luster"
-    project_name: Optional[str] = None  # Name for new project (auto-generated if not provided)
-    shoot_id: Optional[str] = None  # Existing shoot ID (to add photos to existing project)
+    project_name: Optional[str] = (
+        None  # Name for new project (auto-generated if not provided)
+    )
+    shoot_id: Optional[str] = (
+        None  # Existing shoot ID (to add photos to existing project)
+    )
 
 
 @app.get("/health")
@@ -164,6 +180,7 @@ def health_check():
 # R2 Presigned URL Endpoints
 # ============================================================================
 
+
 class PresignedUploadRequest(BaseModel):
     shoot_id: str
     filename: str
@@ -186,14 +203,15 @@ def generate_presigned_upload(
     if not R2_ENABLED:
         raise HTTPException(
             status_code=503,
-            detail="R2 storage not configured. Please set R2 environment variables."
+            detail="R2 storage not configured. Please set R2 environment variables.",
         )
 
     # Validate shoot exists and belongs to user
-    shoot = db.query(Shoot).filter(
-        Shoot.id == request.shoot_id,
-        Shoot.user_id == user.id
-    ).first()
+    shoot = (
+        db.query(Shoot)
+        .filter(Shoot.id == request.shoot_id, Shoot.user_id == user.id)
+        .first()
+    )
     if not shoot:
         raise HTTPException(status_code=404, detail="Shoot not found")
 
@@ -226,8 +244,7 @@ def generate_presigned_upload(
     except Exception as e:
         logger.error(f"Failed to generate presigned upload URL: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate upload URL: {str(e)}"
+            status_code=500, detail=f"Failed to generate upload URL: {str(e)}"
         )
 
 
@@ -253,16 +270,14 @@ def confirm_upload(
     they call this endpoint to register the asset in the database.
     """
     if not R2_ENABLED:
-        raise HTTPException(
-            status_code=503,
-            detail="R2 storage not configured"
-        )
+        raise HTTPException(status_code=503, detail="R2 storage not configured")
 
     # Validate shoot exists and belongs to user
-    shoot = db.query(Shoot).filter(
-        Shoot.id == request.shoot_id,
-        Shoot.user_id == user.id
-    ).first()
+    shoot = (
+        db.query(Shoot)
+        .filter(Shoot.id == request.shoot_id, Shoot.user_id == user.id)
+        .first()
+    )
     if not shoot:
         raise HTTPException(status_code=404, detail="Shoot not found")
 
@@ -271,13 +286,12 @@ def confirm_upload(
         if not r2_client.check_file_exists(request.object_key):
             raise HTTPException(
                 status_code=400,
-                detail="File not found in storage. Upload may have failed."
+                detail="File not found in storage. Upload may have failed.",
             )
     except Exception as e:
         logger.error(f"Failed to verify file in R2: {e}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to verify upload: {str(e)}"
+            status_code=500, detail=f"Failed to verify upload: {str(e)}"
         )
 
     # Create asset record
@@ -341,15 +355,17 @@ def list_shoots(
         else:
             project_status = "draft"  # No jobs yet
 
-        result.append({
-            "id": str(shoot.id),
-            "name": shoot.name,
-            "created_at": shoot.created_at.isoformat(),
-            "updated_at": shoot.updated_at.isoformat(),
-            "asset_count": asset_count,
-            "job_statuses": job_statuses,
-            "status": project_status,
-        })
+        result.append(
+            {
+                "id": str(shoot.id),
+                "name": shoot.name,
+                "created_at": shoot.created_at.isoformat(),
+                "updated_at": shoot.updated_at.isoformat(),
+                "asset_count": asset_count,
+                "job_statuses": job_statuses,
+                "status": project_status,
+            }
+        )
 
     # Sort by updated_at descending (most recent first)
     result.sort(key=lambda x: x["updated_at"], reverse=True)
@@ -387,10 +403,9 @@ async def upload_file(
     print(f"File size attribute: {getattr(file, 'size', 'Not available')}")
 
     # Validate shoot exists and belongs to user
-    shoot = db.query(Shoot).filter(
-        Shoot.id == shoot_id,
-        Shoot.user_id == user.id
-    ).first()
+    shoot = (
+        db.query(Shoot).filter(Shoot.id == shoot_id, Shoot.user_id == user.id).first()
+    )
     if not shoot:
         raise HTTPException(status_code=404, detail="Shoot not found")
 
@@ -450,10 +465,9 @@ def create_job(
     """Create a new processing job"""
 
     # Validate asset exists and belongs to user
-    asset = db.query(Asset).filter(
-        Asset.id == asset_id,
-        Asset.user_id == user.id
-    ).first()
+    asset = (
+        db.query(Asset).filter(Asset.id == asset_id, Asset.user_id == user.id).first()
+    )
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
@@ -496,8 +510,10 @@ def create_job(
     try:
         from job_queue import enqueue_job
 
-        from services.worker.job_processor import (get_job_priority,
-                                                   process_image_enhancement)
+        from services.worker.job_processor import (
+            get_job_priority,
+            process_image_enhancement,
+        )
 
         priority = get_job_priority(credits_used, tier)
         rq_job = enqueue_job(
@@ -533,10 +549,7 @@ def get_job(
 ):
     """Get job status and details"""
 
-    job = db.query(Job).filter(
-        Job.id == job_id,
-        Job.user_id == user.id
-    ).first()
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
@@ -560,7 +573,9 @@ def get_job(
             try:
                 # Get asset for filename
                 asset = db.query(Asset).filter(Asset.id == job.asset_id).first()
-                filename = f"enhanced_{asset.original_filename}" if asset else "enhanced.jpg"
+                filename = (
+                    f"enhanced_{asset.original_filename}" if asset else "enhanced.jpg"
+                )
 
                 result["output_url"] = r2_client.generate_presigned_download_url(
                     object_key=job.output_path,
@@ -586,10 +601,9 @@ def get_shoot_assets(
 ):
     """Get all assets in a shoot with presigned download URLs"""
 
-    shoot = db.query(Shoot).filter(
-        Shoot.id == shoot_id,
-        Shoot.user_id == user.id
-    ).first()
+    shoot = (
+        db.query(Shoot).filter(Shoot.id == shoot_id, Shoot.user_id == user.id).first()
+    )
     if not shoot:
         raise HTTPException(status_code=404, detail="Shoot not found")
 
@@ -606,7 +620,9 @@ def get_shoot_assets(
                     filename=asset.original_filename,
                 )
             except Exception as e:
-                logger.error(f"Failed to generate presigned URL for asset {asset.id}: {e}")
+                logger.error(
+                    f"Failed to generate presigned URL for asset {asset.id}: {e}"
+                )
                 upload_url = f"/uploads/{os.path.basename(asset.file_path)}"
         else:
             upload_url = f"/uploads/{os.path.basename(asset.file_path)}"
@@ -628,28 +644,38 @@ def get_shoot_assets(
             if job.output_path:
                 if R2_ENABLED:
                     try:
-                        job_data["output_url"] = r2_client.generate_presigned_download_url(
-                            object_key=job.output_path,
-                            expiration=3600,
-                            filename=f"enhanced_{asset.original_filename}",
+                        job_data["output_url"] = (
+                            r2_client.generate_presigned_download_url(
+                                object_key=job.output_path,
+                                expiration=3600,
+                                filename=f"enhanced_{asset.original_filename}",
+                            )
                         )
                     except Exception as e:
-                        logger.error(f"Failed to generate presigned URL for job {job.id}: {e}")
-                        job_data["output_url"] = f"/outputs/{os.path.basename(job.output_path)}"
+                        logger.error(
+                            f"Failed to generate presigned URL for job {job.id}: {e}"
+                        )
+                        job_data["output_url"] = (
+                            f"/outputs/{os.path.basename(job.output_path)}"
+                        )
                 else:
-                    job_data["output_url"] = f"/outputs/{os.path.basename(job.output_path)}"
+                    job_data["output_url"] = (
+                        f"/outputs/{os.path.basename(job.output_path)}"
+                    )
             else:
                 job_data["output_url"] = None
 
             job_list.append(job_data)
 
-        asset_list.append({
-            "id": str(asset.id),
-            "filename": asset.original_filename,
-            "size": asset.file_size,
-            "upload_url": upload_url,
-            "jobs": job_list,
-        })
+        asset_list.append(
+            {
+                "id": str(asset.id),
+                "filename": asset.original_filename,
+                "size": asset.file_size,
+                "upload_url": upload_url,
+                "jobs": job_list,
+            }
+        )
 
     return {
         "shoot": {"id": str(shoot.id), "name": shoot.name},
@@ -673,7 +699,7 @@ def serve_output(filename: str, db: Session = Depends(get_db)):
     logger.info(f"Requested filename: {filename}")
 
     # Find the job by looking up the filename (job_id.jpg)
-    job_id = filename.replace('.jpg', '').replace('.jpeg', '').replace('.png', '')
+    job_id = filename.replace(".jpg", "").replace(".jpeg", "").replace(".png", "")
     logger.info(f"Extracted job_id: {job_id}")
 
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -692,20 +718,22 @@ def serve_output(filename: str, db: Session = Depends(get_db)):
     logger.info(f"  - Path starts with '/': {job.output_path.startswith('/')}")
 
     # If R2 is enabled and path doesn't start with /, it's an R2 key
-    if R2_ENABLED and not job.output_path.startswith('/'):
+    if R2_ENABLED and not job.output_path.startswith("/"):
         logger.info(f"Using R2 path - generating presigned URL")
         try:
             # Generate presigned URL for R2 object (valid for 1 hour)
-            logger.info(f"Calling generate_presigned_download_url with key: {job.output_path}")
+            logger.info(
+                f"Calling generate_presigned_download_url with key: {job.output_path}"
+            )
             presigned_url = r2_client.generate_presigned_download_url(
-                object_key=job.output_path,
-                expiration=3600
+                object_key=job.output_path, expiration=3600
             )
             logger.info(f"✅ Generated presigned URL: {presigned_url[:100]}...")
             logger.info(f"Returning 302 redirect to R2")
 
             # Redirect to the presigned URL
             from fastapi.responses import RedirectResponse
+
             return RedirectResponse(url=presigned_url, status_code=302)
         except Exception as e:
             logger.error(f"❌ Failed to generate presigned URL for {job.output_path}")
@@ -713,8 +741,11 @@ def serve_output(filename: str, db: Session = Depends(get_db)):
             logger.error(f"Error message: {str(e)}")
             logger.error(f"Error details: {repr(e)}")
             import traceback
+
             logger.error(f"Traceback: {traceback.format_exc()}")
-            raise HTTPException(status_code=500, detail=f"Failed to retrieve output file: {str(e)}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to retrieve output file: {str(e)}"
+            )
     else:
         # Local filesystem fallback
         logger.info(f"Using local filesystem path")
@@ -759,32 +790,31 @@ async def mobile_enhance(
     print(f"Content type: {image.content_type}")
     print(f"User: {user.id}")
 
-    mobile_shoot = db.query(Shoot).filter(
-        Shoot.user_id == user.id,
-        Shoot.name == "Mobile Uploads"
-    ).first()
-    
+    mobile_shoot = (
+        db.query(Shoot)
+        .filter(Shoot.user_id == user.id, Shoot.name == "Mobile Uploads")
+        .first()
+    )
+
     if not mobile_shoot:
         mobile_shoot = Shoot(
-            id=str(uuid.uuid4()),
-            user_id=user.id,
-            name="Mobile Uploads"
+            id=str(uuid.uuid4()), user_id=user.id, name="Mobile Uploads"
         )
         db.add(mobile_shoot)
         db.flush()
-    
+
     # Save uploaded file
     file_content = await image.read()
     print(f"File content size: {len(file_content)} bytes")
-    
+
     if len(file_content) == 0:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
-    
+
     # Generate unique filename with mobile prefix
     file_ext = os.path.splitext(image.filename)[1] if image.filename else ".jpg"
     unique_filename = f"mobile_{uuid.uuid4()}{file_ext}"
     file_path = os.path.join(UPLOADS_DIR, unique_filename)
-    
+
     # Save file temporarily
     with open(file_path, "wb") as buffer:
         buffer.write(file_content)
@@ -794,10 +824,10 @@ async def mobile_enhance(
     # Check if file needs conversion (HEIC or other formats)
     # Check both file extension and content-type header
     is_heic = (
-        file_ext.lower() in ['.heic', '.heif'] or
-        not file_ext or
-        (image.content_type and 'heic' in image.content_type.lower()) or
-        (image.content_type and 'heif' in image.content_type.lower())
+        file_ext.lower() in [".heic", ".heif"]
+        or not file_ext
+        or (image.content_type and "heic" in image.content_type.lower())
+        or (image.content_type and "heif" in image.content_type.lower())
     )
 
     if is_heic:
@@ -805,7 +835,9 @@ async def mobile_enhance(
         jpg_filename = f"mobile_{uuid.uuid4()}.jpg"
         jpg_path = os.path.join(UPLOADS_DIR, jpg_filename)
 
-        print(f"Converting HEIC/HEIF (content-type: {image.content_type}, ext: {file_ext}) to JPG...")
+        print(
+            f"Converting HEIC/HEIF (content-type: {image.content_type}, ext: {file_ext}) to JPG..."
+        )
         convert_to_jpg(file_path, jpg_path)
 
         # Remove original HEIC file
@@ -822,9 +854,7 @@ async def mobile_enhance(
         r2_key = f"{user.id}/{mobile_shoot.id}/{asset_id}/original.jpg"
         print(f"Uploading to R2: {r2_key}")
         r2_client.upload_file(
-            file_path=file_path,
-            object_key=r2_key,
-            content_type="image/jpeg"
+            file_path=file_path, object_key=r2_key, content_type="image/jpeg"
         )
         # Clean up local file after R2 upload
         os.remove(file_path)
@@ -847,7 +877,7 @@ async def mobile_enhance(
     )
     db.add(asset)
     db.flush()
-    
+
     # Check or create credits
     credit = db.query(Credit).filter(Credit.user_id == user.id).first()
     if not credit:
@@ -865,7 +895,7 @@ async def mobile_enhance(
     # Create job with proper prompt
     style_prompts = {
         "luster": "Luster AI signature style - luxury editorial real estate photography with dramatic lighting",
-        "flambient": "Bright, airy interior with crisp whites and flambient lighting technique"
+        "flambient": "Bright, airy interior with crisp whites and flambient lighting technique",
     }
 
     job = Job(
@@ -877,7 +907,7 @@ async def mobile_enhance(
     )
     db.add(job)
     db.flush()
-    
+
     # Create job event
     event = JobEvent(
         job_id=job.id,
@@ -886,13 +916,13 @@ async def mobile_enhance(
     )
     db.add(event)
     db.commit()
-    
+
     print(f"Job created: {job.id}")
-    
+
     return {
         "job_id": str(job.id),
         "status": "queued",
-        "message": "Enhancement job created successfully"
+        "message": "Enhancement job created successfully",
     }
 
 
@@ -921,10 +951,11 @@ async def mobile_enhance_base64(
 
     if request.shoot_id:
         # Adding to existing project
-        mobile_shoot = db.query(Shoot).filter(
-            Shoot.id == request.shoot_id,
-            Shoot.user_id == user.id
-        ).first()
+        mobile_shoot = (
+            db.query(Shoot)
+            .filter(Shoot.id == request.shoot_id, Shoot.user_id == user.id)
+            .first()
+        )
         if not mobile_shoot:
             raise HTTPException(status_code=404, detail="Project not found")
         print(f"Adding to existing project: {mobile_shoot.name} ({mobile_shoot.id})")
@@ -936,23 +967,20 @@ async def mobile_enhance_base64(
             project_name = f"Project {datetime.now().strftime('%b %d')}"
 
         # Check for duplicate names and add suffix if needed
-        existing_count = db.query(Shoot).filter(
-            Shoot.user_id == user.id,
-            Shoot.name.like(f"{project_name}%")
-        ).count()
+        existing_count = (
+            db.query(Shoot)
+            .filter(Shoot.user_id == user.id, Shoot.name.like(f"{project_name}%"))
+            .count()
+        )
 
         if existing_count > 0:
             project_name = f"{project_name} ({existing_count + 1})"
 
-        mobile_shoot = Shoot(
-            id=str(uuid.uuid4()),
-            user_id=user.id,
-            name=project_name
-        )
+        mobile_shoot = Shoot(id=str(uuid.uuid4()), user_id=user.id, name=project_name)
         db.add(mobile_shoot)
         db.flush()
         print(f"Created new project: {mobile_shoot.name} ({mobile_shoot.id})")
-    
+
     # Save image data temporarily
     temp_filename = f"mobile_{uuid.uuid4()}_temp"
     temp_path = os.path.join(UPLOADS_DIR, temp_filename)
@@ -981,9 +1009,7 @@ async def mobile_enhance_base64(
         r2_key = f"{user.id}/{mobile_shoot.id}/{asset_id}/original.jpg"
         print(f"Uploading to R2: {r2_key}")
         r2_client.upload_file(
-            file_path=file_path,
-            object_key=r2_key,
-            content_type="image/jpeg"
+            file_path=file_path, object_key=r2_key, content_type="image/jpeg"
         )
         # Clean up local file after R2 upload
         os.remove(file_path)
@@ -1006,7 +1032,7 @@ async def mobile_enhance_base64(
     )
     db.add(asset)
     db.flush()
-    
+
     # Check or create credits
     credit = db.query(Credit).filter(Credit.user_id == user.id).first()
     if not credit:
@@ -1024,7 +1050,7 @@ async def mobile_enhance_base64(
     # Create job
     style_prompts = {
         "luster": "Luster AI signature style - luxury editorial real estate photography with dramatic lighting",
-        "flambient": "Bright, airy interior with crisp whites and flambient lighting technique"
+        "flambient": "Bright, airy interior with crisp whites and flambient lighting technique",
     }
 
     job = Job(
@@ -1041,7 +1067,9 @@ async def mobile_enhance_base64(
     event = JobEvent(
         job_id=job.id,
         event_type="created",
-        details=json.dumps({"source": "mobile_base64", "style": request.style, "credits_reserved": 1}),
+        details=json.dumps(
+            {"source": "mobile_base64", "style": request.style, "credits_reserved": 1}
+        ),
     )
     db.add(event)
     db.commit()
@@ -1054,7 +1082,7 @@ async def mobile_enhance_base64(
         "asset_id": str(asset.id),
         "project_name": mobile_shoot.name,
         "status": "queued",
-        "message": "Enhancement job created successfully"
+        "message": "Enhancement job created successfully",
     }
 
 
@@ -1067,34 +1095,31 @@ def mobile_job_status(
     """Get status of mobile enhancement job (requires authentication)"""
 
     # Find job and verify ownership
-    job = db.query(Job).filter(
-        Job.id == job_id,
-        Job.user_id == user.id
-    ).first()
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == user.id).first()
 
     if not job:
         raise HTTPException(status_code=404, detail="Job not found or access denied")
-    
+
     result = {
         "job_id": str(job.id),
         "status": job.status.value,
         "created_at": job.created_at.isoformat(),
         "updated_at": job.updated_at.isoformat(),
     }
-    
+
     if job.started_at:
         result["started_at"] = job.started_at.isoformat()
-    
+
     if job.completed_at:
         result["completed_at"] = job.completed_at.isoformat()
-    
+
     if job.status == JobStatus.succeeded and job.output_path:
         # Return the output URL for mobile to fetch
         result["enhanced_image_url"] = f"/outputs/{os.path.basename(job.output_path)}"
-    
+
     if job.status == JobStatus.failed and job.error_message:
         result["error"] = job.error_message
-    
+
     return result
 
 
@@ -1106,7 +1131,9 @@ def mobile_get_credits(
     """Get user credit balance for mobile"""
     # Use authenticated user or fall back to default for development
     if not user:
-        logger.warning("Mobile credits called without authentication, using DEFAULT_USER_ID")
+        logger.warning(
+            "Mobile credits called without authentication, using DEFAULT_USER_ID"
+        )
         user = db.query(User).filter(User.id == DEFAULT_USER_ID).first()
         if not user:
             user = User(id=DEFAULT_USER_ID, email="mobile@luster.ai")
@@ -1123,7 +1150,11 @@ def mobile_get_credits(
     return {
         "balance": credit.balance,
         "user_id": str(user.id),
-        "updated_at": credit.updated_at.isoformat() if hasattr(credit, 'updated_at') and credit.updated_at else None
+        "updated_at": (
+            credit.updated_at.isoformat()
+            if hasattr(credit, "updated_at") and credit.updated_at
+            else None
+        ),
     }
 
 
@@ -1135,13 +1166,13 @@ def mobile_get_styles():
             {
                 "id": "luster",
                 "name": "Luster",
-                "description": "Luster AI signature style - luxury editorial real estate photography"
+                "description": "Luster AI signature style - luxury editorial real estate photography",
             },
             {
                 "id": "flambient",
                 "name": "Flambient",
-                "description": "Bright, airy interior with crisp whites and flambient lighting"
-            }
+                "description": "Bright, airy interior with crisp whites and flambient lighting",
+            },
         ]
     }
 
@@ -1161,11 +1192,17 @@ def mobile_get_listings(
 
     for shoot in shoots:
         # Get all succeeded jobs for this shoot with their assets
-        jobs = db.query(Job).join(Asset).filter(
-            Asset.shoot_id == shoot.id,
-            Job.status == JobStatus.succeeded,
-            Job.output_path.isnot(None)
-        ).order_by(Job.completed_at.desc()).all()
+        jobs = (
+            db.query(Job)
+            .join(Asset)
+            .filter(
+                Asset.shoot_id == shoot.id,
+                Job.status == JobStatus.succeeded,
+                Job.output_path.isnot(None),
+            )
+            .order_by(Job.completed_at.desc())
+            .all()
+        )
 
         if not jobs:
             continue  # Skip shoots with no completed jobs
@@ -1179,18 +1216,24 @@ def mobile_get_listings(
         enhanced_images = []
         for job in jobs:
             image_url = None
-            if R2_ENABLED and job.output_path and not job.output_path.startswith('/'):
+            if R2_ENABLED and job.output_path and not job.output_path.startswith("/"):
                 try:
                     # Get asset for filename
                     asset = db.query(Asset).filter(Asset.id == job.asset_id).first()
-                    filename = f"enhanced_{asset.original_filename}" if asset else "enhanced.jpg"
+                    filename = (
+                        f"enhanced_{asset.original_filename}"
+                        if asset
+                        else "enhanced.jpg"
+                    )
                     image_url = r2_client.generate_presigned_download_url(
                         object_key=job.output_path,
                         expiration=3600,
                         filename=filename,
                     )
                 except Exception as e:
-                    logger.error(f"Failed to generate presigned URL for job {job.id}: {e}")
+                    logger.error(
+                        f"Failed to generate presigned URL for job {job.id}: {e}"
+                    )
                     image_url = f"/outputs/{os.path.basename(job.output_path)}"
             else:
                 image_url = f"/outputs/{os.path.basename(job.output_path)}"
@@ -1202,7 +1245,13 @@ def mobile_get_listings(
         address = shoot.name
         if not address or address == "Mobile Uploads":
             # Use first asset filename as address, cleaned up
-            address = first_asset.original_filename.replace('.jpg', '').replace('.heic', '').replace('.jpeg', '').replace('_', ' ').title()
+            address = (
+                first_asset.original_filename.replace(".jpg", "")
+                .replace(".heic", "")
+                .replace(".jpeg", "")
+                .replace("_", " ")
+                .title()
+            )
 
         # Create listing object
         listing = {
@@ -1223,10 +1272,7 @@ def mobile_get_listings(
 
     logger.info(f"Found {len(listings)} listings for user {user.id}")
 
-    return {
-        "listings": listings,
-        "count": len(listings)
-    }
+    return {"listings": listings, "count": len(listings)}
 
 
 @app.delete("/api/mobile/projects/{shoot_id}")
@@ -1239,10 +1285,9 @@ def delete_project(
     logger.info(f"Deleting project {shoot_id} for user {user.id}")
 
     # Find the shoot and verify ownership
-    shoot = db.query(Shoot).filter(
-        Shoot.id == shoot_id,
-        Shoot.user_id == user.id
-    ).first()
+    shoot = (
+        db.query(Shoot).filter(Shoot.id == shoot_id, Shoot.user_id == user.id).first()
+    )
 
     if not shoot:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -1254,7 +1299,7 @@ def delete_project(
     deleted_files = []
     for asset in assets:
         # Delete original file from R2
-        if R2_ENABLED and asset.file_path and not asset.file_path.startswith('/'):
+        if R2_ENABLED and asset.file_path and not asset.file_path.startswith("/"):
             try:
                 r2_client.delete_file(asset.file_path)
                 deleted_files.append(asset.file_path)
@@ -1265,7 +1310,7 @@ def delete_project(
         # Delete output files from jobs
         jobs = db.query(Job).filter(Job.asset_id == asset.id).all()
         for job in jobs:
-            if R2_ENABLED and job.output_path and not job.output_path.startswith('/'):
+            if R2_ENABLED and job.output_path and not job.output_path.startswith("/"):
                 try:
                     r2_client.delete_file(job.output_path)
                     deleted_files.append(job.output_path)
@@ -1286,19 +1331,22 @@ def delete_project(
     db.delete(shoot)
     db.commit()
 
-    logger.info(f"Deleted project {shoot_id}: {len(assets)} assets, {len(deleted_files)} R2 files")
+    logger.info(
+        f"Deleted project {shoot_id}: {len(assets)} assets, {len(deleted_files)} R2 files"
+    )
 
     return {
         "success": True,
         "deleted_shoot_id": shoot_id,
         "deleted_assets": len(assets),
-        "deleted_r2_files": len(deleted_files)
+        "deleted_r2_files": len(deleted_files),
     }
 
 
 # ============================================================================
 # Mobile Integration Endpoints
 # ============================================================================
+
 
 @app.post("/api/mobile/users/sync")
 def sync_user(
@@ -1325,10 +1373,7 @@ def sync_user(
         "user_id": str(user.id),
         "email": user.email,
         "created": is_new,
-        "credits": {
-            "balance": credit.balance,
-            "is_new_user": is_new
-        }
+        "credits": {"balance": credit.balance, "is_new_user": is_new},
     }
 
 
@@ -1351,7 +1396,7 @@ def mobile_get_credits_balance(
     return {
         "balance": credit.balance,
         "user_id": str(user.id),
-        "updated_at": credit.updated_at.isoformat() if credit.updated_at else None
+        "updated_at": credit.updated_at.isoformat() if credit.updated_at else None,
     }
 
 
@@ -1373,16 +1418,14 @@ def mobile_presign_upload(
         raise HTTPException(status_code=503, detail="R2 storage not configured")
 
     # Get or create "Mobile Uploads" shoot for this user
-    mobile_shoot = db.query(Shoot).filter(
-        Shoot.user_id == user.id,
-        Shoot.name == "Mobile Uploads"
-    ).first()
+    mobile_shoot = (
+        db.query(Shoot)
+        .filter(Shoot.user_id == user.id, Shoot.name == "Mobile Uploads")
+        .first()
+    )
 
     if not mobile_shoot:
-        mobile_shoot = Shoot(
-            user_id=user.id,
-            name="Mobile Uploads"
-        )
+        mobile_shoot = Shoot(user_id=user.id, name="Mobile Uploads")
         db.add(mobile_shoot)
         db.flush()
 
@@ -1431,10 +1474,11 @@ def mobile_confirm_upload(
     """Confirm upload completion and create asset record"""
 
     # Verify shoot belongs to user
-    shoot = db.query(Shoot).filter(
-        Shoot.id == request.shoot_id,
-        Shoot.user_id == user.id
-    ).first()
+    shoot = (
+        db.query(Shoot)
+        .filter(Shoot.id == request.shoot_id, Shoot.user_id == user.id)
+        .first()
+    )
 
     if not shoot:
         raise HTTPException(status_code=404, detail="Shoot not found")
@@ -1541,18 +1585,20 @@ def get_gallery(
 
             job_list.append(job_data)
 
-        photos.append({
-            "id": str(asset.id),
-            "filename": asset.original_filename,
-            "upload_url": upload_url,
-            "thumbnail_url": None,  # Future: generate thumbnails
-            "shoot": {
-                "id": str(asset.shoot_id),
-                "name": asset.shoot.name,
-            },
-            "created_at": asset.created_at.isoformat(),
-            "jobs": job_list,
-        })
+        photos.append(
+            {
+                "id": str(asset.id),
+                "filename": asset.original_filename,
+                "upload_url": upload_url,
+                "thumbnail_url": None,  # Future: generate thumbnails
+                "shoot": {
+                    "id": str(asset.shoot_id),
+                    "name": asset.shoot.name,
+                },
+                "created_at": asset.created_at.isoformat(),
+                "jobs": job_list,
+            }
+        )
 
     return {
         "photos": photos,
@@ -1561,7 +1607,7 @@ def get_gallery(
             "per_page": per_page,
             "total": total,
             "total_pages": (total + per_page - 1) // per_page if total > 0 else 0,
-        }
+        },
     }
 
 
@@ -1588,7 +1634,9 @@ try:
             app.mount("/admin/rq", dashboard)
             logger.info("RQ Dashboard mounted at /admin/rq")
         except ImportError:
-            logger.warning("rq-dashboard-fast not installed. Install with: pip install rq-dashboard-fast")
+            logger.warning(
+                "rq-dashboard-fast not installed. Install with: pip install rq-dashboard-fast"
+            )
     else:
         logger.info("REDIS_URL not set, skipping RQ Dashboard")
 except Exception as e:

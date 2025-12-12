@@ -33,6 +33,7 @@ Base = declarative_base()
 # For PostgreSQL in production, this could be changed to Uuid type
 UUIDType = String(36)
 
+
 # Helper for default UUID generation - returns string
 def generate_uuid():
     """Generate UUID as string"""
@@ -64,9 +65,7 @@ class Credit(Base):
     __tablename__ = "credits"
 
     id = Column(UUIDType, primary_key=True, default=generate_uuid)
-    user_id = Column(
-        UUIDType, ForeignKey("users.id"), nullable=False, unique=True
-    )
+    user_id = Column(UUIDType, ForeignKey("users.id"), nullable=False, unique=True)
     balance = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

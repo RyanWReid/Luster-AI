@@ -39,7 +39,9 @@ def verify_webhook(request: Request) -> bool:
     signature = request.headers.get("X-RevenueCat-Signature")
 
     if not REVENUECAT_WEBHOOK_SECRET:
-        logger.warning("REVENUECAT_WEBHOOK_SECRET not set - webhook verification disabled!")
+        logger.warning(
+            "REVENUECAT_WEBHOOK_SECRET not set - webhook verification disabled!"
+        )
         return True
 
     if not signature:
@@ -57,10 +59,7 @@ def get_or_create_user(app_user_id: str, email: Optional[str], db: Session) -> U
     user = db.query(User).filter(User.id == app_user_id).first()
 
     if not user:
-        user = User(
-            id=app_user_id,
-            email=email or f"{app_user_id}@luster.ai"
-        )
+        user = User(id=app_user_id, email=email or f"{app_user_id}@luster.ai")
         db.add(user)
         db.flush()
         logger.info(f"Created new user from RevenueCat: {app_user_id}")
@@ -104,7 +103,9 @@ def handle_initial_purchase(event_data: Dict[str, Any], db: Session) -> None:
     if credits_to_add > 0:
         credit.balance += credits_to_add
         db.commit()
-        logger.info(f"Added {credits_to_add} credits to user {app_user_id} (new balance: {credit.balance})")
+        logger.info(
+            f"Added {credits_to_add} credits to user {app_user_id} (new balance: {credit.balance})"
+        )
 
 
 def handle_renewal(event_data: Dict[str, Any], db: Session) -> None:
@@ -133,7 +134,9 @@ def handle_renewal(event_data: Dict[str, Any], db: Session) -> None:
     if credits_to_add > 0:
         credit.balance += credits_to_add
         db.commit()
-        logger.info(f"Added {credits_to_add} credits to user {app_user_id} for renewal (new balance: {credit.balance})")
+        logger.info(
+            f"Added {credits_to_add} credits to user {app_user_id} for renewal (new balance: {credit.balance})"
+        )
 
 
 def handle_cancellation(event_data: Dict[str, Any], db: Session) -> None:
@@ -147,7 +150,9 @@ def handle_cancellation(event_data: Dict[str, Any], db: Session) -> None:
     product_id = event_data.get("product_id")
     expiration_at_ms = event_data.get("expiration_at_ms")
 
-    logger.info(f"Subscription cancelled: user={app_user_id}, product={product_id}, expires_at={expiration_at_ms}")
+    logger.info(
+        f"Subscription cancelled: user={app_user_id}, product={product_id}, expires_at={expiration_at_ms}"
+    )
 
     # We don't remove credits immediately - they can use until expiration
     # You might want to add a flag to the user or send them a notification
@@ -191,7 +196,9 @@ def handle_non_renewing_purchase(event_data: Dict[str, Any], db: Session) -> Non
     if credits_to_add > 0:
         credit.balance += credits_to_add
         db.commit()
-        logger.info(f"Added {credits_to_add} credits to user {app_user_id} (new balance: {credit.balance})")
+        logger.info(
+            f"Added {credits_to_add} credits to user {app_user_id} (new balance: {credit.balance})"
+        )
 
 
 def get_credits_for_product(product_id: str) -> int:
@@ -214,7 +221,6 @@ def get_credits_for_product(product_id: str) -> int:
         "com.lusterai.trial": 10,
         "com.lusterai.pro.monthly": 45,
         "com.lusterai.pro.yearly": 540,  # 45 * 12 if you add yearly
-
         # One-time credit bundles
         "com.lusterai.credits.small": 5,
         "com.lusterai.credits.medium": 15,
@@ -230,10 +236,7 @@ def get_credits_for_product(product_id: str) -> int:
 
 
 @router.post("")
-async def revenuecat_webhook(
-    request: Request,
-    db: Session = Depends(get_db)
-):
+async def revenuecat_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Handle RevenueCat webhook events
 
@@ -299,5 +302,5 @@ def test_webhook():
     return {
         "status": "ok",
         "message": "RevenueCat webhook endpoint is accessible",
-        "webhook_secret_configured": bool(REVENUECAT_WEBHOOK_SECRET)
+        "webhook_secret_configured": bool(REVENUECAT_WEBHOOK_SECRET),
     }

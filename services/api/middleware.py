@@ -26,16 +26,16 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
 
         # Create tracker
         tracker = RequestTracker(
-            request_id=request_id,
-            endpoint=request.url.path,
-            method=request.method
+            request_id=request_id, endpoint=request.url.path, method=request.method
         )
 
         # Store tracker in request state for use in endpoints
         request.state.tracker = tracker
 
         # Add initial metadata
-        tracker.set_metadata("client_ip", request.client.host if request.client else None)
+        tracker.set_metadata(
+            "client_ip", request.client.host if request.client else None
+        )
         tracker.set_metadata("user_agent", request.headers.get("user-agent", "unknown"))
 
         # Process request
@@ -48,7 +48,9 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
             status_code = response.status_code
 
             # Add response metadata
-            tracker.set_metadata("response_size", response.headers.get("content-length", 0))
+            tracker.set_metadata(
+                "response_size", response.headers.get("content-length", 0)
+            )
 
             return response
 

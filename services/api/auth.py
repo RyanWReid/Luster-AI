@@ -4,6 +4,7 @@ Supabase Authentication Module
 Handles JWT verification using JWKS from Supabase, caching public keys,
 and providing FastAPI dependencies for authenticated endpoints.
 """
+
 import os
 import time
 from typing import Dict, Optional
@@ -42,6 +43,7 @@ _jwks_cache_time: float = 0
 
 class AuthenticationError(Exception):
     """Custom authentication error"""
+
     pass
 
 
@@ -119,6 +121,7 @@ def get_public_key_from_jwks(token: str, jwks: Dict) -> str:
             if key.get("kid") == kid:
                 # Convert JWK to PEM format
                 from jwt.algorithms import RSAAlgorithm
+
                 public_key = RSAAlgorithm.from_jwk(key)
                 return public_key
 
@@ -175,7 +178,7 @@ def verify_jwt_token(token: str) -> Dict:
                 "verify_signature": True,
                 "verify_exp": True,  # Verify expiration
                 "verify_aud": True,  # Verify audience
-            }
+            },
         )
 
         # Extract user info

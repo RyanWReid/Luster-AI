@@ -14,8 +14,9 @@ from PIL import Image
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from database import Base, get_db
+from database import Base, get_db, User, Credit
 from main import app
+from auth import get_current_user
 
 # Test database URL - using SQLite for fast tests
 TEST_DATABASE_URL = "sqlite:///./test.db"
@@ -41,7 +42,7 @@ def test_db():
 
 @pytest.fixture(scope="function")
 def client(test_db):
-    """Create a test client with test database"""
+    """Create a test client with test database (no auth)"""
 
     def override_get_db():
         try:
@@ -52,6 +53,44 @@ def client(test_db):
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:
         yield test_client
+    app.dependency_overrides.clear()
+
+
+# Default test user ID - used across tests
+TEST_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
+TEST_USER_EMAIL = "test@example.com"
+
+
+@pytest.fixture(scope="function")
+def test_user(test_db):
+    """Create a test user in the database"""
+    user = User(id=TEST_USER_ID, email=TEST_USER_EMAIL)
+    test_db.add(user)
+    test_db.commit()
+    test_db.refresh(user)
+    return user
+
+
+@pytest.fixture(scope="function")
+def authenticated_client(test_db, test_user):
+    """Create a test client with authentication mocked"""
+
+    def override_get_db():
+        try:
+            yield test_db
+        finally:
+            pass
+
+    def override_get_current_user():
+        # Return the test user without actual JWT verification
+        return test_user
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    with TestClient(app) as test_client:
+        yield test_client
+
     app.dependency_overrides.clear()
 
 

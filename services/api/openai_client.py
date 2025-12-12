@@ -286,7 +286,12 @@ FORBIDDEN:
                     rgb_image = Image.new("RGB", image.size, (255, 255, 255))
                     if image.mode == "P":
                         image = image.convert("RGBA")
-                    rgb_image.paste(image, mask=image.split()[-1] if image.mode in ("RGBA", "LA") else None)
+                    rgb_image.paste(
+                        image,
+                        mask=(
+                            image.split()[-1] if image.mode in ("RGBA", "LA") else None
+                        ),
+                    )
                     image = rgb_image
 
                 # Save without EXIF

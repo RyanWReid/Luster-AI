@@ -2,6 +2,7 @@
 Quick script to create all database tables in production.
 Run this once to initialize the database schema.
 """
+
 import os
 from database import Base, engine
 

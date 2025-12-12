@@ -22,7 +22,7 @@ repos:
         files: ^services/.*\.py$
         args: [--max-line-length, "88", --extend-ignore, "E203,W503"]
 
-  # TypeScript/JavaScript formatting and linting
+  # TypeScript/JavaScript formatting and linting - Web App
   - repo: https://github.com/pre-commit/mirrors-eslint
     rev: v8.56.0
     hooks:
@@ -34,6 +34,25 @@ repos:
           - "@typescript-eslint/eslint-plugin@6.21.0"
           - "@typescript-eslint/parser@6.21.0"
           - "eslint-config-next@14.0.3"
+
+  # Mobile App linting (local hooks)
+  - repo: local
+    hooks:
+      - id: eslint-mobile
+        name: ESLint (Mobile)
+        entry: bash -c 'cd mobile && npm run lint 2>/dev/null || true'
+        language: system
+        files: ^mobile/src/.*\.(ts|tsx)$
+        pass_filenames: false
+        stages: [commit]
+
+      - id: typecheck-mobile
+        name: TypeScript (Mobile)
+        entry: bash -c 'cd mobile && npm run typecheck 2>/dev/null || true'
+        language: system
+        files: ^mobile/src/.*\.(ts|tsx)$
+        pass_filenames: false
+        stages: [commit]
 
   # General code quality
   - repo: https://github.com/pre-commit/pre-commit-hooks

@@ -184,13 +184,7 @@ def get_job_stats(
 
     # Average processing time
     avg_processing_time = (
-        db.query(
-            func.avg(
-                func.extract(
-                    "epoch", Job.completed_at - Job.started_at
-                )
-            )
-        )
+        db.query(func.avg(func.extract("epoch", Job.completed_at - Job.started_at)))
         .filter(
             Job.status == JobStatus.succeeded,
             Job.completed_at >= time_threshold,

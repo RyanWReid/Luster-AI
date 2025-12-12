@@ -6,6 +6,7 @@ These endpoints interface with Supabase Auth for:
 - Session management
 - User logout
 """
+
 import os
 from typing import Optional
 
@@ -70,7 +71,7 @@ async def send_magic_link(request: MagicLinkRequest):
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Supabase authentication not configured"
+            detail="Supabase authentication not configured",
         )
 
     # Supabase Auth endpoint
@@ -84,9 +85,7 @@ async def send_magic_link(request: MagicLinkRequest):
 
     # Add redirect URL if provided
     if request.redirect_to:
-        payload["options"] = {
-            "redirect_to": request.redirect_to
-        }
+        payload["options"] = {"redirect_to": request.redirect_to}
 
     headers = {
         "apikey": SUPABASE_ANON_KEY,
@@ -102,8 +101,7 @@ async def send_magic_link(request: MagicLinkRequest):
         logger.info(f"Magic link sent successfully to {request.email}")
 
         return MagicLinkResponse(
-            message="Magic link sent! Check your email to sign in.",
-            email=request.email
+            message="Magic link sent! Check your email to sign in.", email=request.email
         )
 
     except requests.exceptions.HTTPError as e:
@@ -119,13 +117,13 @@ async def send_magic_link(request: MagicLinkRequest):
 
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to send magic link: {error_message}"
+            detail=f"Failed to send magic link: {error_message}",
         )
     except requests.exceptions.RequestException as e:
         logger.error(f"Network error sending magic link: {e}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service unavailable"
+            detail="Authentication service unavailable",
         )
 
 
@@ -147,9 +145,7 @@ async def get_session(
     """
     if user:
         return SessionResponse(
-            authenticated=True,
-            user_id=str(user.id),
-            email=user.email
+            authenticated=True, user_id=str(user.id), email=user.email
         )
 
     return SessionResponse(authenticated=False)
@@ -192,7 +188,7 @@ async def refresh_token():
     """
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Token refresh should be handled using Supabase client library"
+        detail="Token refresh should be handled using Supabase client library",
     )
 
 
@@ -221,8 +217,10 @@ async def get_current_user_info(
         "updated_at": user.updated_at.isoformat(),
         "credits": {
             "balance": credit.balance if credit else 0,
-            "updated_at": credit.updated_at.isoformat() if credit and credit.updated_at else None
-        }
+            "updated_at": (
+                credit.updated_at.isoformat() if credit and credit.updated_at else None
+            ),
+        },
     }
 
 
@@ -240,8 +238,4 @@ async def verify_token(user: User = Depends(get_current_user)):
     Raises:
         HTTPException: 401 if token is invalid or expired
     """
-    return {
-        "valid": True,
-        "user_id": str(user.id),
-        "email": user.email
-    }
+    return {"valid": True, "user_id": str(user.id), "email": user.email}

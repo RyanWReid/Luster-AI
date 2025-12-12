@@ -25,7 +25,9 @@ class RequestTracker:
         self.phases: List[Dict] = []
         self.metadata: Dict = {}
 
-    def add_phase(self, phase_name: str, duration_ms: float = None, metadata: dict = None):
+    def add_phase(
+        self, phase_name: str, duration_ms: float = None, metadata: dict = None
+    ):
         """Record a phase of the request lifecycle"""
         if duration_ms is None:
             duration_ms = (time.time() - self.start_time) * 1000
@@ -87,10 +89,7 @@ def get_active_requests() -> List[Dict]:
         requests = list(_request_log)
 
     # Find requests from last 5 minutes
-    recent = [
-        r for r in requests
-        if datetime.fromisoformat(r["start_time"]) > cutoff
-    ]
+    recent = [r for r in requests if datetime.fromisoformat(r["start_time"]) > cutoff]
 
     return sorted(recent, key=lambda x: x["start_time"], reverse=True)
 
@@ -103,10 +102,7 @@ def get_endpoint_stats(minutes: int = 60) -> Dict:
         requests = list(_request_log)
 
     # Filter to time window
-    recent = [
-        r for r in requests
-        if datetime.fromisoformat(r["start_time"]) > cutoff
-    ]
+    recent = [r for r in requests if datetime.fromisoformat(r["start_time"]) > cutoff]
 
     stats = {}
     for req in recent:
@@ -116,7 +112,7 @@ def get_endpoint_stats(minutes: int = 60) -> Dict:
                 "count": 0,
                 "total_duration_ms": 0,
                 "avg_duration_ms": 0,
-                "min_duration_ms": float('inf'),
+                "min_duration_ms": float("inf"),
                 "max_duration_ms": 0,
                 "errors": 0,
             }
@@ -145,8 +141,7 @@ def clear_old_requests(minutes: int = 60):
     with _lock:
         # Filter out old requests
         filtered = [
-            r for r in _request_log
-            if datetime.fromisoformat(r["start_time"]) > cutoff
+            r for r in _request_log if datetime.fromisoformat(r["start_time"]) > cutoff
         ]
         _request_log.clear()
         _request_log.extend(filtered)

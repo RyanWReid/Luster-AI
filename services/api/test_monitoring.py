@@ -63,7 +63,9 @@ def test_health_response_structure():
 
     print("✓ Health response has all expected keys")
     print(f"  - Status: {data['status']}")
-    print(f"  - Database: {data['services'].get('database', {}).get('status', 'unknown')}")
+    print(
+        f"  - Database: {data['services'].get('database', {}).get('status', 'unknown')}"
+    )
     print(f"  - Workers: {data['workers'].get('estimated_active', 'unknown')}")
 
     return True

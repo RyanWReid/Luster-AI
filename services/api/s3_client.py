@@ -48,9 +48,7 @@ class R2Client:
             raise ValueError("R2_SECRET_ACCESS_KEY is required")
 
         # Construct R2 endpoint URL
-        self.endpoint_url = (
-            f"https://{self.account_id}.r2.cloudflarestorage.com"
-        )
+        self.endpoint_url = f"https://{self.account_id}.r2.cloudflarestorage.com"
 
         # Configure boto3 S3 client for R2
         self.s3_client = boto3.client(
