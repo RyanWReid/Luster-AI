@@ -1,9 +1,9 @@
+import base64
 import json
 import os
 import shutil
 import time
 import uuid
-import base64
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -13,17 +13,20 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from PIL import Image
+from pillow_heif import register_heif_opener
 from pydantic import BaseModel
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
-from sqlalchemy.orm import Session
 from sqlalchemy import text
-from PIL import Image
-from pillow_heif import register_heif_opener
+from sqlalchemy.orm import Session
 
 # Register HEIF opener so PIL can handle HEIC files
 register_heif_opener()
 
+from admin import router as admin_router
+from auth import get_current_user, get_optional_user
+from auth_endpoints import router as auth_router
 from database import Asset, Credit, Job, JobEvent, JobStatus, Shoot, User, get_db
 from logger import (
     LoggingMiddleware,
@@ -34,10 +37,7 @@ from logger import (
     log_upload_started,
     logger,
 )
-from admin import router as admin_router
 from revenue_cat import router as revenuecat_router
-from auth import get_current_user, get_optional_user
-from auth_endpoints import router as auth_router
 
 # Import R2 client for presigned URLs
 try:
@@ -483,6 +483,10 @@ def create_job(
     if credit.balance < credits_used:
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
+    # Deduct credits upfront (reservation) - will be refunded on failure
+    credit.balance -= credits_used
+    db.flush()
+
     # Create job in database
     job = Job(
         asset_id=asset_id,
@@ -508,12 +512,12 @@ def create_job(
 
     # Enqueue job for processing
     try:
-        from job_queue import enqueue_job
-
         from services.worker.job_processor import (
             get_job_priority,
             process_image_enhancement,
         )
+
+        from job_queue import enqueue_job
 
         priority = get_job_priority(credits_used, tier)
         rq_job = enqueue_job(
@@ -591,6 +595,46 @@ def get_job(
         result["error_message"] = job.error_message
 
     return result
+
+
+@app.post("/jobs/{job_id}/refund")
+def refund_job_credits(
+    job_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Refund credits for a failed job.
+
+    This endpoint allows users to request a refund for a job that failed.
+    Credits are only refunded if:
+    - The job exists and belongs to the user
+    - The job is in 'failed' status
+    - Credits haven't already been refunded
+    """
+    from credit_service import refund_job
+
+    # Get job and verify ownership
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Attempt refund
+    success, message = refund_job(db, job)
+
+    if not success:
+        raise HTTPException(status_code=400, detail=message)
+
+    # Get updated credit balance
+    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
+
+    return {
+        "success": True,
+        "message": message,
+        "job_id": str(job.id),
+        "credits_refunded": job.credits_used,
+        "new_balance": credit.balance if credit else 0,
+    }
 
 
 @app.get("/shoots/{shoot_id}/assets")

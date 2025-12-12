@@ -47,13 +47,13 @@ class TestCreditDeduction:
         test_db.add(asset)
         test_db.commit()
 
-        # Act: create a job (standard tier = 1 credit)
+        # Act: create a job (free tier = 1 credit)
         response = authenticated_client.post(
             "/jobs",
             data={
                 "asset_id": str(asset.id),
                 "prompt": "Enhance this photo",
-                "tier": "standard",
+                "tier": "free",
             },
         )
 
@@ -209,21 +209,20 @@ class TestCreditValidation:
 
 class TestCreditRefund:
     """
-    CRITICAL: Tests for credit refund on job failure
+    Tests for credit refund on job failure.
 
-    These tests document the expected behavior. If they fail,
-    it indicates the refund logic is not implemented - which is a bug!
+    The credit system uses "upfront reservation":
+    - Credits deducted at job creation
+    - Credits refunded if job fails (via worker or refund endpoint)
     """
 
     @pytest.mark.api
-    @pytest.mark.xfail(reason="Credit refund not implemented - CRITICAL BUG")
-    def test_credits_refunded_on_job_failure(self, test_db, test_user):
+    def test_credits_refunded_via_service(self, test_db, test_user):
         """
-        Credits should be refunded when a job fails.
+        Credits should be refunded when refund_job is called on a failed job.
+        """
+        from credit_service import refund_job
 
-        Current behavior: Credits are deducted upfront and never refunded.
-        Expected behavior: If job fails, credits should be returned.
-        """
         initial_balance = 10
 
         credit = Credit(user_id=TEST_USER_ID, balance=initial_balance)
@@ -244,7 +243,7 @@ class TestCreditRefund:
         test_db.add(asset)
         test_db.flush()
 
-        # Create a job that will be marked as failed
+        # Create a job and deduct credits (simulating job creation flow)
         job = Job(
             asset_id=asset.id,
             user_id=TEST_USER_ID,
@@ -253,39 +252,32 @@ class TestCreditRefund:
             credits_used=1,
         )
         test_db.add(job)
+        credit.balance -= 1  # Upfront deduction
         test_db.commit()
 
-        # Deduct credits (simulating job creation)
-        credit.balance -= 1
-        test_db.commit()
+        # Verify credits were deducted
+        test_db.refresh(credit)
+        assert credit.balance == initial_balance - 1
 
         # Simulate job failure
         job.status = JobStatus.failed
         job.error_message = "OpenAI API error"
         test_db.commit()
 
-        # TODO: This is where refund logic should trigger
-        # Expected: credit.balance should be restored to initial_balance
+        # Call refund service
+        success, message = refund_job(test_db, job)
 
+        assert success is True
+        assert "Refunded 1 credits" in message
+
+        # Verify credits restored
         test_db.refresh(credit)
-
-        # This assertion documents the expected behavior
-        # Currently fails because refund is not implemented
-        assert credit.balance == initial_balance, (
-            "Credits should be refunded when job fails. "
-            f"Expected {initial_balance}, got {credit.balance}"
-        )
+        assert credit.balance == initial_balance
 
     @pytest.mark.api
-    @pytest.mark.xfail(reason="Refund endpoint not implemented - CRITICAL BUG")
     def test_refund_endpoint_exists(self, authenticated_client, test_db, test_user):
         """
-        There should be an endpoint or mechanism to refund credits.
-
-        This could be:
-        - Automatic refund when job status changes to 'failed'
-        - Admin endpoint to manually refund
-        - Worker callback that triggers refund
+        The /jobs/{job_id}/refund endpoint should refund credits for failed jobs.
         """
         credit = Credit(user_id=TEST_USER_ID, balance=9)  # Started with 10, deducted 1
         test_db.add(credit)
@@ -316,14 +308,111 @@ class TestCreditRefund:
         test_db.add(job)
         test_db.commit()
 
-        # Try to refund via endpoint (should exist but doesn't)
+        # Refund via endpoint
         response = authenticated_client.post(f"/jobs/{job.id}/refund")
 
-        # Expected: endpoint exists and returns 200
+        # Endpoint exists and returns 200
         assert response.status_code == 200
+
+        data = response.json()
+        assert data["success"] is True
+        assert data["credits_refunded"] == 1
+        assert data["new_balance"] == 10
 
         test_db.refresh(credit)
         assert credit.balance == 10  # Refunded
+
+    @pytest.mark.api
+    def test_refund_prevented_for_non_failed_job(self, authenticated_client, test_db, test_user):
+        """
+        Refund should be rejected for jobs that haven't failed.
+        """
+        credit = Credit(user_id=TEST_USER_ID, balance=9)
+        test_db.add(credit)
+
+        shoot = Shoot(user_id=TEST_USER_ID, name="Test Shoot")
+        test_db.add(shoot)
+        test_db.flush()
+
+        asset = Asset(
+            shoot_id=shoot.id,
+            user_id=TEST_USER_ID,
+            original_filename="test.jpg",
+            file_path="/fake/path/test.jpg",
+            file_size=1000,
+            mime_type="image/jpeg",
+        )
+        test_db.add(asset)
+        test_db.flush()
+
+        job = Job(
+            asset_id=asset.id,
+            user_id=TEST_USER_ID,
+            prompt="Enhance",
+            status=JobStatus.succeeded,  # Not failed!
+            credits_used=1,
+        )
+        test_db.add(job)
+        test_db.commit()
+
+        # Try to refund a succeeded job
+        response = authenticated_client.post(f"/jobs/{job.id}/refund")
+
+        # Should be rejected
+        assert response.status_code == 400
+        assert "not in failed state" in response.json()["detail"]
+
+        # Balance unchanged
+        test_db.refresh(credit)
+        assert credit.balance == 9
+
+    @pytest.mark.api
+    def test_double_refund_prevented(self, authenticated_client, test_db, test_user):
+        """
+        Double refunds should be prevented.
+        """
+        credit = Credit(user_id=TEST_USER_ID, balance=9)
+        test_db.add(credit)
+
+        shoot = Shoot(user_id=TEST_USER_ID, name="Test Shoot")
+        test_db.add(shoot)
+        test_db.flush()
+
+        asset = Asset(
+            shoot_id=shoot.id,
+            user_id=TEST_USER_ID,
+            original_filename="test.jpg",
+            file_path="/fake/path/test.jpg",
+            file_size=1000,
+            mime_type="image/jpeg",
+        )
+        test_db.add(asset)
+        test_db.flush()
+
+        job = Job(
+            asset_id=asset.id,
+            user_id=TEST_USER_ID,
+            prompt="Enhance",
+            status=JobStatus.failed,
+            credits_used=1,
+            error_message="Test failure",
+        )
+        test_db.add(job)
+        test_db.commit()
+
+        # First refund - should succeed
+        response1 = authenticated_client.post(f"/jobs/{job.id}/refund")
+        assert response1.status_code == 200
+        assert response1.json()["new_balance"] == 10
+
+        # Second refund - should fail
+        response2 = authenticated_client.post(f"/jobs/{job.id}/refund")
+        assert response2.status_code == 400
+        assert "already refunded" in response2.json()["detail"]
+
+        # Balance should not have changed
+        test_db.refresh(credit)
+        assert credit.balance == 10
 
 
 class TestJobStatusTransitions:
