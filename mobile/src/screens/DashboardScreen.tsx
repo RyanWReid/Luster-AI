@@ -10,6 +10,7 @@ import {
   Image,
   Dimensions,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -183,12 +184,24 @@ export default function DashboardScreen() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
   const [searchText, setSearchText] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Sync listings from backend on mount
   useEffect(() => {
     console.log('🏠 DashboardScreen mounted - syncing listings from backend')
     syncFromBackend()
   }, []) // Empty deps array = run once on mount
+
+  // Pull-to-refresh handler
+  const handleRefresh = async () => {
+    console.log('🔄 Pull-to-refresh triggered')
+    setIsRefreshing(true)
+    try {
+      await syncFromBackend()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   // Debug: Log listings
   console.log('DashboardScreen - listings count:', listings.length)
@@ -260,7 +273,16 @@ export default function DashboardScreen() {
           onPress={() => handlePropertyPress(item)}
         >
           <Image source={item.image} style={styles.propertyImageList} />
-          {item.isEnhanced && (
+          {item.status === 'processing' ? (
+            <View style={styles.processingBadgeList}>
+              <ActivityIndicator size="small" color="#F59E0B" style={{ marginRight: 4 }} />
+              <Text style={styles.processingTextList}>Processing</Text>
+            </View>
+          ) : item.status === 'failed' ? (
+            <View style={styles.failedBadgeList}>
+              <Text style={styles.failedTextList}>Failed</Text>
+            </View>
+          ) : item.isEnhanced && (
             <View style={styles.enhancedBadgeList}>
               <Text style={styles.enhancedTextList}>Enhanced</Text>
             </View>
@@ -286,7 +308,16 @@ export default function DashboardScreen() {
         onPress={() => handlePropertyPress(item)}
       >
         <Image source={item.image} style={styles.propertyImage} />
-        {item.isEnhanced && (
+        {item.status === 'processing' ? (
+          <View style={styles.processingBadgeGrid}>
+            <ActivityIndicator size="small" color="#F59E0B" style={{ marginRight: 4 }} />
+            <Text style={styles.processingTextGrid}>Processing</Text>
+          </View>
+        ) : item.status === 'failed' ? (
+          <View style={styles.failedBadgeGrid}>
+            <Text style={styles.failedTextGrid}>Failed</Text>
+          </View>
+        ) : item.isEnhanced && (
           <View style={styles.enhancedBadgeGrid}>
             <Text style={styles.enhancedTextGrid}>Enhanced</Text>
           </View>
@@ -424,6 +455,7 @@ export default function DashboardScreen() {
               originalImages: listing.originalImages, // Include original images
               isEnhanced: listing.isEnhanced,
               squareFeet: listing.squareFeet,
+              status: listing.status, // Include status for processing indicator
             })),
             ...mockProperties,
           ]}
@@ -436,6 +468,14 @@ export default function DashboardScreen() {
           showsVerticalScrollIndicator={false}
           numColumns={viewMode === 'grid' ? 2 : 1}
           key={viewMode} // Force re-render when switching views
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor="#D4AF37"
+              colors={['#D4AF37']}
+            />
+          }
         />
       </View>
 
@@ -786,6 +826,74 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: '#16A34A',
+    textTransform: 'uppercase',
+  },
+  // Processing badge styles
+  processingBadgeList: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    zIndex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  processingTextList: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#92400E',
+    textTransform: 'uppercase',
+  },
+  processingBadgeGrid: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  processingTextGrid: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#92400E',
+    textTransform: 'uppercase',
+  },
+  // Failed badge styles
+  failedBadgeList: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    zIndex: 1,
+  },
+  failedTextList: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#DC2626',
+    textTransform: 'uppercase',
+  },
+  failedBadgeGrid: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  failedTextGrid: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#DC2626',
     textTransform: 'uppercase',
   },
 })

@@ -18,6 +18,46 @@ interface ListingsResponse {
 
 class ListingsService {
   /**
+   * Delete a project from backend (and R2 storage)
+   */
+  async deleteProject(shootId: string): Promise<boolean> {
+    try {
+      console.log(`===== DELETE PROJECT ${shootId} =====`)
+      const token = await getAuthToken()
+
+      if (!token) {
+        console.log('No auth token - user not signed in')
+        return false
+      }
+
+      const response = await fetch(`${API_BASE_URL}/api/mobile/projects/${shootId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      console.log('Delete response status:', response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Failed to delete project:', {
+          status: response.status,
+          error: errorText,
+        })
+        return false
+      }
+
+      const data = await response.json()
+      console.log(`✅ Deleted project: ${data.deleted_assets} assets, ${data.deleted_r2_files} R2 files`)
+      return true
+    } catch (error) {
+      console.error('Error deleting project:', error)
+      return false
+    }
+  }
+
+  /**
    * Fetch user's completed listings from backend
    */
   async fetchListings(): Promise<PropertyListing[]> {

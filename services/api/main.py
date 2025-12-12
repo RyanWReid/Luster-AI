@@ -1229,6 +1229,73 @@ def mobile_get_listings(
     }
 
 
+@app.delete("/api/mobile/projects/{shoot_id}")
+def delete_project(
+    shoot_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Delete a project (shoot) and all its assets/jobs from database and R2"""
+    logger.info(f"Deleting project {shoot_id} for user {user.id}")
+
+    # Find the shoot and verify ownership
+    shoot = db.query(Shoot).filter(
+        Shoot.id == shoot_id,
+        Shoot.user_id == user.id
+    ).first()
+
+    if not shoot:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Get all assets for this shoot
+    assets = db.query(Asset).filter(Asset.shoot_id == shoot_id).all()
+
+    # Delete R2 files for each asset
+    deleted_files = []
+    for asset in assets:
+        # Delete original file from R2
+        if R2_ENABLED and asset.file_path and not asset.file_path.startswith('/'):
+            try:
+                r2_client.delete_file(asset.file_path)
+                deleted_files.append(asset.file_path)
+                logger.info(f"Deleted R2 file: {asset.file_path}")
+            except Exception as e:
+                logger.error(f"Failed to delete R2 file {asset.file_path}: {e}")
+
+        # Delete output files from jobs
+        jobs = db.query(Job).filter(Job.asset_id == asset.id).all()
+        for job in jobs:
+            if R2_ENABLED and job.output_path and not job.output_path.startswith('/'):
+                try:
+                    r2_client.delete_file(job.output_path)
+                    deleted_files.append(job.output_path)
+                    logger.info(f"Deleted R2 output: {job.output_path}")
+                except Exception as e:
+                    logger.error(f"Failed to delete R2 output {job.output_path}: {e}")
+
+            # Delete job events
+            db.query(JobEvent).filter(JobEvent.job_id == job.id).delete()
+
+        # Delete jobs for this asset
+        db.query(Job).filter(Job.asset_id == asset.id).delete()
+
+    # Delete all assets for this shoot
+    db.query(Asset).filter(Asset.shoot_id == shoot_id).delete()
+
+    # Delete the shoot itself
+    db.delete(shoot)
+    db.commit()
+
+    logger.info(f"Deleted project {shoot_id}: {len(assets)} assets, {len(deleted_files)} R2 files")
+
+    return {
+        "success": True,
+        "deleted_shoot_id": shoot_id,
+        "deleted_assets": len(assets),
+        "deleted_r2_files": len(deleted_files)
+    }
+
+
 # ============================================================================
 # Mobile Integration Endpoints
 # ============================================================================

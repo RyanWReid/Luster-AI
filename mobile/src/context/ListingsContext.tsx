@@ -27,8 +27,8 @@ interface ListingsContextType {
   addListing: (listing: Omit<PropertyListing, 'id' | 'createdAt'>) => void
   updateListing: (id: string, updates: Partial<PropertyListing>) => void
   updateListingName: (id: string, newName: string) => void
-  removeListing: (id: string) => void
-  clearListings: () => void
+  removeListing: (id: string) => Promise<void>
+  clearListings: () => Promise<void>
   syncFromBackend: () => Promise<void>
   isLoading: boolean
   isProcessing: (id: string) => boolean
@@ -112,11 +112,34 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
     )
   }
 
-  const removeListing = (id: string) => {
-    setListings(prev => prev.filter(listing => listing.id !== id))
+  const removeListing = async (id: string) => {
+    // Find the listing to get backendShootId
+    const listing = listings.find(l => l.id === id)
+
+    // Remove from local state immediately for responsive UI
+    setListings(prev => prev.filter(l => l.id !== id))
+
+    // If it has a backend shoot ID, delete from server too
+    if (listing?.backendShootId) {
+      console.log(`🗑️ Deleting project from backend: ${listing.backendShootId}`)
+      const success = await listingsService.deleteProject(listing.backendShootId)
+      if (success) {
+        console.log(`✅ Project deleted from backend and R2`)
+      } else {
+        console.error(`❌ Failed to delete from backend (local removed anyway)`)
+      }
+    }
   }
 
-  const clearListings = () => {
+  const clearListings = async () => {
+    // Delete all listings from backend first
+    const deletePromises = listings
+      .filter(l => l.backendShootId)
+      .map(l => listingsService.deleteProject(l.backendShootId!))
+
+    await Promise.all(deletePromises)
+    console.log(`🗑️ Cleared ${listings.length} listings from backend`)
+
     setListings([])
   }
 

@@ -13,6 +13,7 @@ import {
   Easing,
   Platform,
   Alert,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -126,12 +127,25 @@ export default function DashboardScreenNew() {
   const { listings, isLoading: isLoadingListings, clearListings, syncFromBackend } = useListings()
   const { creditBalance, isLoadingCredits } = usePhotos()
   const showMockData = false // Toggle this to true to show mock data cards
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Sync listings from backend on mount (restore after reinstall)
   useEffect(() => {
     console.log('🏠 DashboardScreenNew mounted - syncing listings from backend')
     syncFromBackend()
   }, [])
+
+  // Pull-to-refresh handler
+  const handleRefresh = async () => {
+    console.log('🔄 Pull-to-refresh triggered')
+    setIsRefreshing(true)
+    hapticFeedback.light()
+    try {
+      await syncFromBackend()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
 
   // Use real listings if available, otherwise use mock data
   const displayData = listings.length > 0 ? listings : (showMockData ? mockProperties : [])
@@ -481,7 +495,18 @@ export default function DashboardScreenNew() {
       </Animated.View>
 
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          style={styles.scrollView}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor="#D4AF37"
+              colors={['#D4AF37']}
+            />
+          }
+        >
           {/* Header */}
           <Animated.View
             style={[
