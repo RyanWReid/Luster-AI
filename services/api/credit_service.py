@@ -8,6 +8,7 @@ This module provides reusable functions for credit management including:
 """
 
 import json
+from typing import cast
 
 from sqlalchemy.orm import Session
 
@@ -32,7 +33,9 @@ def validate_credits(db: Session, user_id: str, required: int) -> tuple[bool, Cr
         (has_sufficient, credit_record)
     """
     credit = get_or_create_credit(db, user_id)
-    return credit.balance >= required, credit
+    # Cast to int to satisfy mypy - SQLAlchemy columns evaluate properly at runtime
+    balance = cast(int, credit.balance)
+    return balance >= required, credit
 
 
 def deduct_credits(db: Session, user_id: str, amount: int) -> Credit:
@@ -44,18 +47,19 @@ def deduct_credits(db: Session, user_id: str, amount: int) -> Credit:
         ValueError if insufficient credits
     """
     credit = get_or_create_credit(db, user_id)
-    if credit.balance < amount:
+    balance = cast(int, credit.balance)
+    if balance < amount:
         raise ValueError(
-            f"Insufficient credits. Required: {amount}, Available: {credit.balance}"
+            f"Insufficient credits. Required: {amount}, Available: {balance}"
         )
 
-    credit.balance -= amount
+    credit.balance = balance - amount  # type: ignore[assignment]
     db.flush()
     return credit
 
 
 def refund_credits(
-    db: Session, user_id: str, amount: int, job_id: str = None
+    db: Session, user_id: str, amount: int, job_id: str | None = None
 ) -> Credit:
     """
     Refund credits to user's balance.
@@ -71,7 +75,8 @@ def refund_credits(
         Updated credit record
     """
     credit = get_or_create_credit(db, user_id)
-    credit.balance += amount
+    balance = cast(int, credit.balance)
+    credit.balance = balance + amount  # type: ignore[assignment]
     db.flush()
 
     # Add audit event if job_id provided

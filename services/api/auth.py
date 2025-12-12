@@ -7,7 +7,7 @@ and providing FastAPI dependencies for authenticated endpoints.
 
 import os
 import time
-from typing import Dict, Optional
+from typing import Any
 
 import jwt
 import requests
@@ -37,7 +37,7 @@ JWT_AUDIENCE = "authenticated"  # Supabase default audience
 
 # Cache configuration
 JWKS_CACHE_TTL = 3600  # 1 hour cache for JWKS
-_jwks_cache: Optional[Dict] = None
+_jwks_cache: dict[str, Any] | None = None
 _jwks_cache_time: float = 0
 
 
@@ -47,7 +47,7 @@ class AuthenticationError(Exception):
     pass
 
 
-def get_jwks() -> Dict:
+def get_jwks() -> dict[str, Any]:
     """
     Fetch JWKS (JSON Web Key Set) from Supabase with caching.
 
@@ -74,7 +74,7 @@ def get_jwks() -> Dict:
         response = requests.get(SUPABASE_JWKS_URL, timeout=10)
         response.raise_for_status()
 
-        jwks = response.json()
+        jwks: dict[str, Any] = response.json()
 
         # Update cache
         _jwks_cache = jwks
@@ -94,7 +94,7 @@ def get_jwks() -> Dict:
         raise AuthenticationError(f"Failed to fetch JWKS: {str(e)}")
 
 
-def get_public_key_from_jwks(token: str, jwks: Dict) -> str:
+def get_public_key_from_jwks(token: str, jwks: dict[str, Any]) -> Any:
     """
     Extract the public key from JWKS based on token's kid (key ID).
 
@@ -103,7 +103,7 @@ def get_public_key_from_jwks(token: str, jwks: Dict) -> str:
         jwks: JWKS dictionary
 
     Returns:
-        Public key string in PEM format
+        Public key (RSA key object) for JWT verification
 
     Raises:
         AuthenticationError: If key cannot be found
@@ -131,7 +131,7 @@ def get_public_key_from_jwks(token: str, jwks: Dict) -> str:
         raise AuthenticationError(f"Invalid token format: {str(e)}")
 
 
-def verify_jwt_token(token: str) -> Dict:
+def verify_jwt_token(token: str) -> dict[str, Any]:
     """
     Verify JWT token from Supabase and extract claims.
 
@@ -207,7 +207,7 @@ def verify_jwt_token(token: str) -> Dict:
         raise AuthenticationError(f"Token verification failed: {str(e)}")
 
 
-def get_or_create_user(user_id: str, email: Optional[str], db: Session) -> User:
+def get_or_create_user(user_id: str, email: str | None, db: Session) -> User:
     """
     Get existing user or create new one with default credits.
 
@@ -255,7 +255,7 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
     """
@@ -322,9 +322,9 @@ async def get_current_user(
 
 
 async def get_optional_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
     db: Session = Depends(get_db),
-) -> Optional[User]:
+) -> User | None:
     """
     FastAPI dependency for optional authentication.
 

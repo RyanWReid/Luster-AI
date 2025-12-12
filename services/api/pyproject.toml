@@ -21,15 +21,63 @@ known_first_party = ["app", "database", "auth", "s3_client", "openai_client"]
 
 [tool.mypy]
 python_version = "3.11"
+# Enable strict mode for new code
+strict = true
+# Allow gradual adoption by relaxing some strict checks
+disallow_untyped_decorators = false  # FastAPI decorators
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+# Show error codes for targeted suppression
+show_error_codes = true
+# Performance
+cache_fine_grained = true
 exclude = [
     "venv",
     ".venv",
     "alembic/versions",
     "__pycache__",
+    "tests/",  # Gradual adoption - type tests later
 ]
+
+# Per-module overrides for third-party libs without stubs
+[[tool.mypy.overrides]]
+module = [
+    "slowapi.*",
+    "jose.*",
+    "PIL.*",
+    "rq.*",
+    "supabase.*",
+]
+ignore_missing_imports = true
+
+# Strict modules (fully typed)
+[[tool.mypy.overrides]]
+module = [
+    "database",
+    "credit_service",
+    "logger",
+    "request_tracker",
+    "rate_limiter",
+]
+strict = true
+
+# Gradual adoption for larger modules
+[[tool.mypy.overrides]]
+module = [
+    "main",
+    "admin",
+    "auth",
+    "auth_endpoints",
+    "revenue_cat",
+    "openai_client",
+    "s3_client",
+    "middleware",
+    "job_queue",
+]
+# Allow some flexibility during migration
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

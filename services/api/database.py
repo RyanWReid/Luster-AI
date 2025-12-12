@@ -1,14 +1,15 @@
 import enum
 import os
 import uuid
+from collections.abc import Generator
 from datetime import datetime
+from typing import Any
 
 from dotenv import load_dotenv
 from sqlalchemy import Column, DateTime
 from sqlalchemy import Enum as SQLEnum
-from sqlalchemy import ForeignKey, Integer, String, Text, Uuid, create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy import ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, relationship, sessionmaker
 
 load_dotenv()
 
@@ -24,10 +25,15 @@ else:
 # Strip any whitespace that might have been accidentally added
 DATABASE_URL = DATABASE_URL.strip() if DATABASE_URL else None
 
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL)  # type: ignore[arg-type]
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-Base = declarative_base()
+
+class Base(DeclarativeBase):
+    """SQLAlchemy declarative base with proper typing support"""
+
+    pass
+
 
 # For SQLite, use String(36) to store UUIDs
 # For PostgreSQL in production, this could be changed to Uuid type
@@ -35,7 +41,7 @@ UUIDType = String(36)
 
 
 # Helper for default UUID generation - returns string
-def generate_uuid():
+def generate_uuid() -> str:
     """Generate UUID as string"""
     return str(uuid.uuid4())
 
@@ -137,7 +143,8 @@ class JobEvent(Base):
     job = relationship("Job", back_populates="events")
 
 
-def get_db():
+def get_db() -> Generator[Session, None, None]:
+    """Dependency that provides a database session"""
     db = SessionLocal()
     try:
         yield db

@@ -2,37 +2,40 @@
 Request tracking middleware and storage for monitoring photo processing lifecycle
 """
 
-import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional
-from collections import deque
 import threading
+import time
+from collections import deque
+from datetime import datetime, timedelta
+from typing import Any
 
 # Thread-safe in-memory storage for recent requests
 # In production, this could be Redis or a time-series database
-_request_log = deque(maxlen=100)  # Keep last 100 requests
+_request_log: deque[dict[str, Any]] = deque(maxlen=100)  # Keep last 100 requests
 _lock = threading.Lock()
 
 
 class RequestTracker:
     """Track individual requests through the system"""
 
-    def __init__(self, request_id: str, endpoint: str, method: str):
+    def __init__(self, request_id: str, endpoint: str, method: str) -> None:
         self.request_id = request_id
         self.endpoint = endpoint
         self.method = method
         self.start_time = time.time()
-        self.phases: List[Dict] = []
-        self.metadata: Dict = {}
+        self.phases: list[dict[str, Any]] = []
+        self.metadata: dict[str, Any] = {}
 
     def add_phase(
-        self, phase_name: str, duration_ms: float = None, metadata: dict = None
-    ):
+        self,
+        phase_name: str,
+        duration_ms: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         """Record a phase of the request lifecycle"""
         if duration_ms is None:
             duration_ms = (time.time() - self.start_time) * 1000
 
-        phase_data = {
+        phase_data: dict[str, Any] = {
             "name": phase_name,
             "duration_ms": duration_ms,
             "timestamp": datetime.utcnow().isoformat(),
@@ -43,15 +46,15 @@ class RequestTracker:
 
         self.phases.append(phase_data)
 
-    def set_metadata(self, key: str, value):
+    def set_metadata(self, key: str, value: Any) -> None:
         """Add metadata to the request"""
         self.metadata[key] = value
 
-    def complete(self, status_code: int, error: str = None):
+    def complete(self, status_code: int, error: str | None = None) -> None:
         """Mark request as complete and store in log"""
         total_duration = (time.time() - self.start_time) * 1000
 
-        request_data = {
+        request_data: dict[str, Any] = {
             "request_id": self.request_id,
             "endpoint": self.endpoint,
             "method": self.method,
@@ -68,7 +71,9 @@ class RequestTracker:
             _request_log.append(request_data)
 
 
-def get_recent_requests(limit: int = 50, endpoint_filter: str = None) -> List[Dict]:
+def get_recent_requests(
+    limit: int = 50, endpoint_filter: str | None = None
+) -> list[dict[str, Any]]:
     """Get recent requests from the log"""
     with _lock:
         requests = list(_request_log)
@@ -81,7 +86,7 @@ def get_recent_requests(limit: int = 50, endpoint_filter: str = None) -> List[Di
     return sorted(requests, key=lambda x: x["start_time"], reverse=True)[:limit]
 
 
-def get_active_requests() -> List[Dict]:
+def get_active_requests() -> list[dict[str, Any]]:
     """Get requests that started recently but haven't completed (potential processing)"""
     cutoff = datetime.utcnow() - timedelta(minutes=5)
 
@@ -94,7 +99,7 @@ def get_active_requests() -> List[Dict]:
     return sorted(recent, key=lambda x: x["start_time"], reverse=True)
 
 
-def get_endpoint_stats(minutes: int = 60) -> Dict:
+def get_endpoint_stats(minutes: int = 60) -> dict[str, Any]:
     """Get statistics for each endpoint"""
     cutoff = datetime.utcnow() - timedelta(minutes=minutes)
 
@@ -104,7 +109,7 @@ def get_endpoint_stats(minutes: int = 60) -> Dict:
     # Filter to time window
     recent = [r for r in requests if datetime.fromisoformat(r["start_time"]) > cutoff]
 
-    stats = {}
+    stats: dict[str, Any] = {}
     for req in recent:
         endpoint = req["endpoint"]
         if endpoint not in stats:
@@ -134,7 +139,7 @@ def get_endpoint_stats(minutes: int = 60) -> Dict:
     return stats
 
 
-def clear_old_requests(minutes: int = 60):
+def clear_old_requests(minutes: int = 60) -> None:
     """Clear requests older than specified minutes (maintenance function)"""
     cutoff = datetime.utcnow() - timedelta(minutes=minutes)
 

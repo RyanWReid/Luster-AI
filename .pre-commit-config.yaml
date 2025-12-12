@@ -22,6 +22,17 @@ repos:
         files: ^services/.*\.py$
         args: [--max-line-length, "88", --extend-ignore, "E203,W503"]
 
+  # Type checking for Python
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        files: ^services/api/.*\.py$
+        args: [--config-file, services/api/pyproject.toml]
+        additional_dependencies:
+          - types-requests
+          - types-Pillow
+
   # TypeScript/JavaScript formatting and linting - Web App
   - repo: https://github.com/pre-commit/mirrors-eslint
     rev: v8.56.0

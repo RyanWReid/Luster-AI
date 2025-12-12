@@ -5,11 +5,13 @@ Structured logging setup using structlog
 import logging
 import os
 import sys
+from typing import Any, MutableMapping
 
 import structlog
+from structlog.typing import WrappedLogger
 
 
-def setup_logging():
+def setup_logging() -> WrappedLogger:
     """Configure structured logging for the application"""
 
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -22,23 +24,24 @@ def setup_logging():
         level=getattr(logging, log_level),
     )
 
+    # Add environment and service info
+    def add_service_context(
+        logger: WrappedLogger, method_name: str, event_dict: MutableMapping[str, Any]
+    ) -> MutableMapping[str, Any]:
+        event_dict["service"] = "luster-api"
+        event_dict["environment"] = environment
+        event_dict["version"] = os.getenv("APP_VERSION", "1.0.0")
+        return event_dict
+
     # Configure structlog processors
-    processors = [
+    processors: list[Any] = [
+        add_service_context,
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.StackInfoRenderer(),
         structlog.dev.set_exc_info,
         structlog.processors.TimeStamper(fmt="ISO"),
     ]
-
-    # Add environment and service info
-    def add_service_context(logger, method_name, event_dict):
-        event_dict["service"] = "luster-api"
-        event_dict["environment"] = environment
-        event_dict["version"] = os.getenv("APP_VERSION", "1.0.0")
-        return event_dict
-
-    processors.insert(0, add_service_context)
 
     # Use JSON formatter in production, pretty formatter in development
     if environment == "production":
@@ -48,7 +51,7 @@ def setup_logging():
 
     # Configure structlog
     structlog.configure(
-        processors=processors,
+        processors=processors,  # type: ignore[arg-type]
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(logging, log_level)
         ),
@@ -64,7 +67,9 @@ logger = setup_logging()
 
 
 # Logging utilities
-def log_api_request(request_id: str, method: str, path: str, user_id: str = None):
+def log_api_request(
+    request_id: str, method: str, path: str, user_id: str | None = None
+) -> None:
     """Log API request"""
     logger.info(
         "API request started",
@@ -76,7 +81,7 @@ def log_api_request(request_id: str, method: str, path: str, user_id: str = None
     )
 
 
-def log_api_response(request_id: str, status_code: int, duration_ms: float):
+def log_api_response(request_id: str, status_code: int, duration_ms: float) -> None:
     """Log API response"""
     logger.info(
         "API request completed",
@@ -87,7 +92,9 @@ def log_api_response(request_id: str, status_code: int, duration_ms: float):
     )
 
 
-def log_job_created(job_id: str, asset_id: str, user_id: str, credits_used: int):
+def log_job_created(
+    job_id: str, asset_id: str, user_id: str, credits_used: int
+) -> None:
     """Log job creation"""
     logger.info(
         "Job created",
@@ -99,7 +106,7 @@ def log_job_created(job_id: str, asset_id: str, user_id: str, credits_used: int)
     )
 
 
-def log_job_started(job_id: str, worker_id: str = None):
+def log_job_started(job_id: str, worker_id: str | None = None) -> None:
     """Log job processing start"""
     logger.info(
         "Job processing started",
@@ -109,7 +116,9 @@ def log_job_started(job_id: str, worker_id: str = None):
     )
 
 
-def log_job_completed(job_id: str, duration_ms: float, output_size: int = None):
+def log_job_completed(
+    job_id: str, duration_ms: float, output_size: int | None = None
+) -> None:
     """Log job completion"""
     logger.info(
         "Job completed successfully",
@@ -120,7 +129,7 @@ def log_job_completed(job_id: str, duration_ms: float, output_size: int = None):
     )
 
 
-def log_job_failed(job_id: str, error: str, duration_ms: float = None):
+def log_job_failed(job_id: str, error: str, duration_ms: float | None = None) -> None:
     """Log job failure"""
     logger.error(
         "Job failed",
@@ -131,7 +140,9 @@ def log_job_failed(job_id: str, error: str, duration_ms: float = None):
     )
 
 
-def log_upload_started(asset_id: str, filename: str, file_size: int, user_id: str):
+def log_upload_started(
+    asset_id: str, filename: str, file_size: int, user_id: str
+) -> None:
     """Log file upload start"""
     logger.info(
         "File upload started",
@@ -143,7 +154,7 @@ def log_upload_started(asset_id: str, filename: str, file_size: int, user_id: st
     )
 
 
-def log_upload_completed(asset_id: str, duration_ms: float):
+def log_upload_completed(asset_id: str, duration_ms: float) -> None:
     """Log file upload completion"""
     logger.info(
         "File upload completed",
@@ -155,7 +166,7 @@ def log_upload_completed(asset_id: str, duration_ms: float):
 
 def log_credit_transaction(
     user_id: str, amount: int, operation: str, balance_after: int
-):
+) -> None:
     """Log credit transactions"""
     logger.info(
         "Credit transaction",
@@ -167,7 +178,7 @@ def log_credit_transaction(
     )
 
 
-def log_health_check(status: str, services: dict):
+def log_health_check(status: str, services: dict[str, Any]) -> None:
     """Log health check results"""
     logger.info(
         "Health check performed",
@@ -181,10 +192,10 @@ def log_health_check(status: str, services: dict):
 class LoggingMiddleware:
     """FastAPI middleware for structured request/response logging"""
 
-    def __init__(self, app):
+    def __init__(self, app: Any) -> None:
         self.app = app
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -199,15 +210,15 @@ class LoggingMiddleware:
         structlog.contextvars.bind_contextvars(request_id=request_id)
 
         # Log request start
-        method = scope["method"]
-        path = scope["path"]
+        method: str = scope["method"]
+        path: str = scope["path"]
         log_api_request(request_id, method, path)
 
         # Process request
         response_started = False
-        status_code = None
+        status_code: int | None = None
 
-        async def send_wrapper(message):
+        async def send_wrapper(message: dict[str, Any]) -> None:
             nonlocal response_started, status_code
             if message["type"] == "http.response.start":
                 response_started = True
