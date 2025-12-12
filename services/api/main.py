@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from PIL import Image
 from pillow_heif import register_heif_opener
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sqlalchemy import text
@@ -42,6 +42,7 @@ from logger import (
 )
 from rate_limiter import RATE_LIMITS, limiter, rate_limit_exceeded_handler
 from revenue_cat import router as revenuecat_router
+from schemas import validate_uuid
 
 # Import R2 client for presigned URLs
 try:
@@ -114,6 +115,16 @@ Path(OUTPUTS_DIR).mkdir(parents=True, exist_ok=True)
 DEFAULT_USER_ID = "550e8400-e29b-41d4-a716-446655440000"
 
 
+def validate_path_uuid(value: str, param_name: str = "id") -> str:
+    """Validate a path parameter is a valid UUID and return it."""
+    try:
+        return validate_uuid(value)
+    except ValueError:
+        raise HTTPException(
+            status_code=400, detail=f"Invalid {param_name}: must be a valid UUID"
+        )
+
+
 def convert_to_jpg(input_path: str, output_path: str, quality: int = 95) -> None:
     """
     Convert any image format (including HEIC) to JPG.
@@ -149,16 +160,36 @@ def convert_to_jpg(input_path: str, output_path: str, quality: int = 95) -> None
         )
 
 
-# Pydantic models for mobile API
+# Pydantic models for mobile API with validation
 class Base64ImageRequest(BaseModel):
+    """Request schema for base64 image upload with validation."""
+
     image: str  # Base64 encoded image
     style: str = "luster"
-    project_name: Optional[str] = (
-        None  # Name for new project (auto-generated if not provided)
-    )
-    shoot_id: Optional[str] = (
-        None  # Existing shoot ID (to add photos to existing project)
-    )
+    project_name: Optional[str] = None
+    shoot_id: Optional[str] = None
+
+    @field_validator("image")
+    @classmethod
+    def validate_image(cls, v: str) -> str:
+        if len(v) < 100:
+            raise ValueError("Image data too short - invalid base64")
+        return v
+
+    @field_validator("style")
+    @classmethod
+    def validate_style(cls, v: str) -> str:
+        allowed = {"luster", "flambient"}
+        if v not in allowed:
+            raise ValueError(f"Style must be one of: {', '.join(allowed)}")
+        return v
+
+    @field_validator("shoot_id")
+    @classmethod
+    def validate_shoot_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            return validate_uuid(v)
+        return v
 
 
 @app.get("/health")
@@ -190,10 +221,35 @@ def health_check():
 
 
 class PresignedUploadRequest(BaseModel):
+    """Request schema for presigned upload URL with validation."""
+
     shoot_id: str
     filename: str
     content_type: str = "image/jpeg"
     max_file_size: int = 10 * 1024 * 1024  # 10MB default
+
+    @field_validator("shoot_id")
+    @classmethod
+    def validate_shoot_id(cls, v: str) -> str:
+        return validate_uuid(v)
+
+    @field_validator("filename")
+    @classmethod
+    def validate_filename(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Filename cannot be empty")
+        if len(v) > 255:
+            raise ValueError("Filename too long (max 255 characters)")
+        return v.strip()
+
+    @field_validator("max_file_size")
+    @classmethod
+    def validate_max_file_size(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("File size must be positive")
+        if v > 50 * 1024 * 1024:  # 50MB max
+            raise ValueError("File size too large (max 50MB)")
+        return v
 
 
 @app.post("/uploads/presign")
@@ -257,12 +313,28 @@ def generate_presigned_upload(
 
 
 class ConfirmUploadRequest(BaseModel):
+    """Request schema for confirming upload with validation."""
+
     asset_id: str
     shoot_id: str
     object_key: str
     filename: str
     file_size: int
     content_type: str = "image/jpeg"
+
+    @field_validator("asset_id", "shoot_id")
+    @classmethod
+    def validate_uuids(cls, v: str) -> str:
+        return validate_uuid(v)
+
+    @field_validator("file_size")
+    @classmethod
+    def validate_file_size(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError("File size must be positive")
+        if v > 50 * 1024 * 1024:
+            raise ValueError("File size too large (max 50MB)")
+        return v
 
 
 @app.post("/uploads/confirm")
@@ -383,11 +455,18 @@ def list_shoots(
 
 @app.post("/shoots")
 def create_shoot(
-    name: str = Form(...),
+    name: str = Form(..., min_length=1, max_length=255),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Create a new photo shoot"""
+    """Create a new photo shoot with validated name"""
+    # Additional validation for whitespace-only names
+    name = name.strip()
+    if not name:
+        raise HTTPException(
+            status_code=422, detail="Name cannot be empty or whitespace"
+        )
+
     shoot = Shoot(user_id=user.id, name=name)
     db.add(shoot)
     db.commit()
@@ -562,6 +641,8 @@ def get_job(
     user: User = Depends(get_current_user),
 ):
     """Get job status and details"""
+    # Validate job_id is a valid UUID
+    job_id = validate_path_uuid(job_id, "job_id")
 
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == user.id).first()
     if not job:
@@ -624,6 +705,9 @@ def refund_job_credits(
     """
     from credit_service import refund_job
 
+    # Validate job_id is a valid UUID
+    job_id = validate_path_uuid(job_id, "job_id")
+
     # Get job and verify ownership
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == user.id).first()
     if not job:
@@ -654,6 +738,8 @@ def get_shoot_assets(
     user: User = Depends(get_current_user),
 ):
     """Get all assets in a shoot with presigned download URLs"""
+    # Validate shoot_id is a valid UUID
+    shoot_id = validate_path_uuid(shoot_id, "shoot_id")
 
     shoot = (
         db.query(Shoot).filter(Shoot.id == shoot_id, Shoot.user_id == user.id).first()
