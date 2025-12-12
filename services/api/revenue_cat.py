@@ -5,16 +5,16 @@ Handles webhook events from RevenueCat to sync subscription status
 and credit balance with our backend.
 """
 
-import json
+import hashlib
+import hmac
 import os
-from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Request, HTTPException, Depends
-from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session
 
-from database import User, Credit, get_db
+from database import Credit, User, get_db
 from logger import logger
 
 load_dotenv()
@@ -26,32 +26,45 @@ router = APIRouter(prefix="/api/webhooks/revenuecat", tags=["webhooks"])
 REVENUECAT_WEBHOOK_SECRET = os.getenv("REVENUECAT_WEBHOOK_SECRET")
 
 
-def verify_webhook(request: Request) -> bool:
+async def verify_webhook_signature(request: Request, body: bytes) -> bool:
     """
-    Verify RevenueCat webhook signature
+    Verify RevenueCat webhook signature using HMAC-SHA256.
 
-    RevenueCat sends a X-RevenueCat-Signature header with the webhook
-    that we can use to verify the request is authentic.
+    RevenueCat sends a X-RevenueCat-Signature header containing
+    an HMAC-SHA256 signature of the request body.
+
+    See: https://www.revenuecat.com/docs/webhooks#webhook-authentication
     """
-    # TODO: Implement signature verification when you have the secret
-    # For now, we'll just log a warning
-
     signature = request.headers.get("X-RevenueCat-Signature")
 
     if not REVENUECAT_WEBHOOK_SECRET:
         logger.warning(
-            "REVENUECAT_WEBHOOK_SECRET not set - webhook verification disabled!"
+            "REVENUECAT_WEBHOOK_SECRET not set - webhook verification disabled! "
+            "Set this in production to prevent forged webhooks."
         )
-        return True
+        return True  # Allow in development, but log warning
 
     if not signature:
-        logger.warning("Missing X-RevenueCat-Signature header")
+        logger.warning("Missing X-RevenueCat-Signature header - rejecting webhook")
         return False
 
-    # In production, verify the signature matches
-    # See: https://www.revenuecat.com/docs/webhooks#webhook-authentication
+    # Compute expected signature
+    expected_signature = hmac.new(
+        key=REVENUECAT_WEBHOOK_SECRET.encode("utf-8"),
+        msg=body,
+        digestmod=hashlib.sha256,
+    ).hexdigest()
 
-    return True
+    # Use constant-time comparison to prevent timing attacks
+    is_valid = hmac.compare_digest(signature, expected_signature)
+
+    if not is_valid:
+        logger.warning(
+            f"Invalid webhook signature. Expected: {expected_signature[:16]}..., "
+            f"Got: {signature[:16]}..."
+        )
+
+    return is_valid
 
 
 def get_or_create_user(app_user_id: str, email: Optional[str], db: Session) -> User:
@@ -250,15 +263,19 @@ async def revenuecat_webhook(request: Request, db: Session = Depends(get_db)):
 
     See: https://www.revenuecat.com/docs/webhooks
     """
+    import json
 
-    # Verify webhook is from RevenueCat
-    if not verify_webhook(request):
-        logger.warning("Webhook verification failed")
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    # Read raw body first (needed for signature verification)
+    raw_body = await request.body()
+
+    # Verify webhook signature (CRITICAL: prevents forged webhooks)
+    if not await verify_webhook_signature(request, raw_body):
+        logger.warning("Webhook signature verification failed - rejecting")
+        raise HTTPException(status_code=401, detail="Invalid signature")
 
     # Parse webhook body
     try:
-        body = await request.json()
+        body = json.loads(raw_body)
     except Exception as e:
         logger.error(f"Failed to parse webhook body: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON")
