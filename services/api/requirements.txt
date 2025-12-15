@@ -22,6 +22,9 @@ boto3
 # Database migrations
 alembic
 
+# Rate limiting
+slowapi
+
 # Task queue (better than Celery)
 rq
 redis
