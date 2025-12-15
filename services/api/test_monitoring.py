@@ -4,6 +4,7 @@ Run with: python test_monitoring.py
 """
 
 import sys
+
 from fastapi.testclient import TestClient
 
 # Import the app

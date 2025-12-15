@@ -14,9 +14,9 @@ from PIL import Image
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from database import Base, get_db, User, Credit
-from main import app
 from auth import get_current_user
+from database import Base, Credit, User, get_db
+from main import app
 
 # Test database URL - using SQLite for fast tests
 TEST_DATABASE_URL = "sqlite:///./test.db"

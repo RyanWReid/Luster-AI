@@ -16,7 +16,7 @@ Note: Uses authenticated_client fixture which mocks JWT auth with TEST_USER_ID
 
 import pytest
 
-from database import Asset, Credit, Job, JobStatus, JobEvent, Shoot, User
+from database import Asset, Credit, Job, JobEvent, JobStatus, Shoot, User
 from tests.conftest import TEST_USER_ID
 
 
@@ -24,7 +24,9 @@ class TestCreditDeduction:
     """Tests for credit deduction on job creation"""
 
     @pytest.mark.api
-    def test_credit_deducted_on_job_creation(self, authenticated_client, test_db, test_user):
+    def test_credit_deducted_on_job_creation(
+        self, authenticated_client, test_db, test_user
+    ):
         """Credits should be deducted when a job is created"""
         initial_balance = 10
 
@@ -110,7 +112,9 @@ class TestCreditValidation:
     """Tests for credit balance validation"""
 
     @pytest.mark.api
-    def test_job_rejected_with_zero_credits(self, authenticated_client, test_db, test_user):
+    def test_job_rejected_with_zero_credits(
+        self, authenticated_client, test_db, test_user
+    ):
         """Job creation should fail with 402 when user has 0 credits"""
         credit = Credit(user_id=TEST_USER_ID, balance=0)
         test_db.add(credit)
@@ -143,7 +147,9 @@ class TestCreditValidation:
         assert credit.balance == 0
 
     @pytest.mark.api
-    def test_job_rejected_with_insufficient_credits_for_tier(self, authenticated_client, test_db, test_user):
+    def test_job_rejected_with_insufficient_credits_for_tier(
+        self, authenticated_client, test_db, test_user
+    ):
         """Premium job should fail with 402 when user has only 1 credit"""
         # User has 1 credit but premium costs 2
         credit = Credit(user_id=TEST_USER_ID, balance=1)
@@ -181,7 +187,9 @@ class TestCreditValidation:
         assert credit.balance == 1
 
     @pytest.mark.api
-    def test_no_credit_record_treated_as_zero(self, authenticated_client, test_db, test_user):
+    def test_no_credit_record_treated_as_zero(
+        self, authenticated_client, test_db, test_user
+    ):
         """User with no credit record should be treated as having 0 credits"""
         # No credit record created for test_user
         shoot = Shoot(user_id=TEST_USER_ID, name="Test Shoot")
@@ -323,7 +331,9 @@ class TestCreditRefund:
         assert credit.balance == 10  # Refunded
 
     @pytest.mark.api
-    def test_refund_prevented_for_non_failed_job(self, authenticated_client, test_db, test_user):
+    def test_refund_prevented_for_non_failed_job(
+        self, authenticated_client, test_db, test_user
+    ):
         """
         Refund should be rejected for jobs that haven't failed.
         """
@@ -557,7 +567,9 @@ class TestCreditAuditTrail:
     """Tests for credit transaction audit trail"""
 
     @pytest.mark.api
-    def test_job_event_created_on_job_creation(self, authenticated_client, test_db, test_user):
+    def test_job_event_created_on_job_creation(
+        self, authenticated_client, test_db, test_user
+    ):
         """JobEvent should be created when job is created"""
         credit = Credit(user_id=TEST_USER_ID, balance=10)
         test_db.add(credit)
@@ -592,8 +604,5 @@ class TestCreditAuditTrail:
         assert len(events) >= 1
 
         # First event should be creation
-        create_event = next(
-            (e for e in events if e.event_type == "created"),
-            None
-        )
+        create_event = next((e for e in events if e.event_type == "created"), None)
         assert create_event is not None

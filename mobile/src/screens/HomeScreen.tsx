@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
@@ -8,12 +8,15 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import { useFocusEffect } from '@react-navigation/native'
 import * as ImagePicker from 'expo-image-picker'
 import { useAuth } from '../context/AuthContext'
 import enhancementService from '../services/enhancementService'
+import { useErrorHandler } from '../hooks/useErrorHandler'
 
 const STYLE_PRESETS = [
   { id: 'luster', name: 'Luster', icon: 'sparkles' },
@@ -22,11 +25,13 @@ const STYLE_PRESETS = [
 
 export default function HomeScreen() {
   const { credits, refreshCredits, synced } = useAuth()
+  const { handleError } = useErrorHandler()
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [selectedStyle, setSelectedStyle] = useState<string>('luster')
   const [processing, setProcessing] = useState(false)
   const [enhancedImageUrl, setEnhancedImageUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   // Refresh credits when user is synced
   useEffect(() => {
@@ -34,6 +39,22 @@ export default function HomeScreen() {
       refreshCredits()
     }
   }, [synced])
+
+  // Refresh credits when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      if (synced) {
+        refreshCredits()
+      }
+    }, [synced])
+  )
+
+  // Pull to refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await refreshCredits()
+    setRefreshing(false)
+  }, [refreshCredits])
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
@@ -119,9 +140,19 @@ export default function HomeScreen() {
         await refreshCredits()
         setError(jobResult.error || 'Enhancement failed')
       }
-    } catch (error: any) {
-      console.error('Enhancement error:', error)
-      setError(error.message || 'Failed to enhance photo')
+    } catch (err: unknown) {
+      // Use centralized error handler - handles rate limits, auth, credits, etc.
+      handleError(err, {
+        onRetry: handleEnhance,
+        onHandled: (info) => {
+          // Only show inline error for unknown/validation errors
+          if (info.type === 'unknown' || info.type === 'validation') {
+            setError(info.message)
+          } else {
+            setError(null) // Alert handles it
+          }
+        },
+      })
     } finally {
       setProcessing(false)
     }
@@ -129,7 +160,12 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView}>
+      <ScrollView
+        style={styles.scrollView}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <View style={styles.creditBar}>
           <Text style={styles.creditText}>Credits: {credits}</Text>
           <TouchableOpacity style={styles.buyButton}>

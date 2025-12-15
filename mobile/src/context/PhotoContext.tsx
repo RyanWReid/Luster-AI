@@ -1,5 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react'
-import enhancementService from '../services/enhancementService'
+import React, { createContext, useContext, useState, ReactNode } from 'react'
 import { useAuth } from './AuthContext'
 
 interface PhotoContextType {
@@ -8,9 +7,9 @@ interface PhotoContextType {
   enhancedPhotos: string[]
   setEnhancedPhotos: (photos: string[]) => void
   clearPhotos: () => void
+  // Credit values now come from AuthContext for single source of truth
   creditBalance: number
-  setCreditBalance: (balance: number) => void
-  refreshCredits: () => Promise<void>
+  refreshCredits: () => Promise<number>
   isLoadingCredits: boolean
 }
 
@@ -19,57 +18,30 @@ const PhotoContext = createContext<PhotoContextType | undefined>(undefined)
 export function PhotoProvider({ children }: { children: ReactNode }) {
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([])
   const [enhancedPhotos, setEnhancedPhotos] = useState<string[]>([])
-  const [creditBalance, setCreditBalance] = useState<number>(0)
-  const [isLoadingCredits, setIsLoadingCredits] = useState(false)
-  const { user, loading: authLoading } = useAuth()
+
+  // Use credits from AuthContext as single source of truth
+  const { credits, refreshCredits: authRefreshCredits, loading: authLoading } = useAuth()
 
   const clearPhotos = () => {
     setSelectedPhotos([])
     setEnhancedPhotos([])
   }
 
+  // Wrapper to maintain API compatibility
   const refreshCredits = async () => {
-    // Only fetch credits if user is authenticated
-    if (!user) {
-      setCreditBalance(0)
-      return
-    }
-
-    setIsLoadingCredits(true)
-    try {
-      const balance = await enhancementService.getCreditBalance()
-      setCreditBalance(balance)
-      console.log(`✅ Fetched credit balance: ${balance}`)
-    } catch (error) {
-      console.error('Failed to fetch credits:', error)
-      // Fallback to 0 if API fails
-      setCreditBalance(0)
-    } finally {
-      setIsLoadingCredits(false)
-    }
+    return authRefreshCredits()
   }
 
-  // Load credits only when user is authenticated
-  useEffect(() => {
-    if (!authLoading && user) {
-      refreshCredits()
-    } else if (!user) {
-      // Clear credits when user logs out
-      setCreditBalance(0)
-    }
-  }, [user, authLoading])
-
   return (
-    <PhotoContext.Provider value={{ 
-      selectedPhotos, 
-      setSelectedPhotos, 
+    <PhotoContext.Provider value={{
+      selectedPhotos,
+      setSelectedPhotos,
       enhancedPhotos,
       setEnhancedPhotos,
       clearPhotos,
-      creditBalance,
-      setCreditBalance,
+      creditBalance: credits,
       refreshCredits,
-      isLoadingCredits
+      isLoadingCredits: authLoading
     }}>
       {children}
     </PhotoContext.Provider>

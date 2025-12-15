@@ -123,7 +123,7 @@ export default function GalleryScreen() {
       console.log('GalleryScreen - Using real enhanced images:', propertyImages.length)
       const heights = [180, 220, 160, 240, 200, 180, 220, 160]
       
-      return propertyImages.map((image, index) => ({
+      return propertyImages.map((image: { uri: string }, index: number) => ({
         id: `real-${index}-${Math.random().toString(36).substring(2, 11)}`,
         uri: image, // Already in { uri: string } format
         height: heights[index % heights.length],

@@ -218,7 +218,7 @@ export default function AccountSettingsScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Save',
-          onPress: (name) => {
+          onPress: (name: string | undefined) => {
             if (name && name.trim()) {
               Alert.alert('Name Updated', `Your name has been changed to ${name.trim()}`)
             }
@@ -246,15 +246,15 @@ export default function AccountSettingsScreen() {
                 { text: 'Cancel', style: 'cancel' },
                 {
                   text: 'Send Verification',
-                  onPress: (newEmail) => {
+                  onPress: (newEmail: string | undefined) => {
                     if (newEmail && newEmail.includes('@')) {
                       Alert.alert('Verification Sent', `Check ${newEmail} for a verification link.`)
                     }
                   },
                 },
               ],
-              'email-address',
-              ''
+              'plain-text',
+              '' // keyboardType would need native module for email-address
             )
           },
         },
@@ -270,15 +270,15 @@ export default function AccountSettingsScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Save',
-          onPress: (phone) => {
+          onPress: (phone: string | undefined) => {
             if (phone) {
               Alert.alert('Phone Updated', 'Your phone number has been saved.')
             }
           },
         },
       ],
-      'phone-pad',
-      ''
+      'plain-text',
+      '' // keyboardType would need native module for phone-pad
     )
   }
 

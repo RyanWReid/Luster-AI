@@ -11,7 +11,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useAuth } from '../context/AuthContext'
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth()
+  const { user, signOut, credits } = useAuth()
 
   const menuItems = [
     { icon: 'card-outline', label: 'Purchase Credits', action: () => {} },
@@ -31,7 +31,7 @@ export default function ProfileScreen() {
           <Text style={styles.email}>{user?.email || 'user@example.com'}</Text>
           <View style={styles.statsRow}>
             <View style={styles.stat}>
-              <Text style={styles.statValue}>3</Text>
+              <Text style={styles.statValue}>{credits}</Text>
               <Text style={styles.statLabel}>Credits</Text>
             </View>
             <View style={styles.stat}>

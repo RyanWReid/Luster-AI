@@ -8,10 +8,10 @@ import {
   ScrollView,
   Dimensions,
   FlatList,
-  PanResponder,
   Animated,
   Easing,
   Alert,
+  Pressable,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -94,8 +94,10 @@ export default function ResultScreen() {
   const { selectedPhotos, enhancedPhotos } = usePhotos()
   const { addListing, updateListing } = useListings()
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [containerWidth, setContainerWidth] = useState(width - 48)
-  const sliderPosition = useRef(new Animated.Value((width - 48) / 2)).current
+  const [showingOriginal, setShowingOriginal] = useState(false)
+
+  // Animation for crossfade between images
+  const crossfadeAnim = useRef(new Animated.Value(0)).current
 
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -167,31 +169,24 @@ export default function ResultScreen() {
       ])
     ).start()
 
-    // Reset slider to center when image changes
-    Animated.spring(sliderPosition, {
-      toValue: containerWidth / 2,
-      friction: 8,
-      useNativeDriver: false,
-    }).start()
-  }, [currentIndex, containerWidth])
+    // Reset to enhanced image when switching between photos
+    setShowingOriginal(false)
+    crossfadeAnim.setValue(0)
+  }, [currentIndex])
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        return Math.abs(gestureState.dx) > 5
-      },
-      onPanResponderGrant: () => {
-        hapticFeedback.selection()
-      },
-      onPanResponderMove: (evt, gestureState) => {
-        const newPosition = Math.max(0, Math.min(containerWidth, gestureState.moveX - 24))
-        sliderPosition.setValue(newPosition)
-      },
-      onPanResponderRelease: () => {
-        hapticFeedback.light()
-      },
-    })
-  ).current
+  // Toggle between original and enhanced image
+  const toggleImage = () => {
+    hapticFeedback.light()
+    const newValue = !showingOriginal
+    setShowingOriginal(newValue)
+
+    Animated.timing(crossfadeAnim, {
+      toValue: newValue ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true,
+      easing: Easing.ease,
+    }).start()
+  }
 
   const handleBack = () => {
     hapticFeedback.light()
@@ -403,27 +398,20 @@ export default function ResultScreen() {
             ]}
           >
             <BlurView intensity={40} tint="light" style={styles.imageCard}>
-              <View
-                style={styles.imageContainer}
-                onLayout={(event) => {
-                  const { width } = event.nativeEvent.layout
-                  setContainerWidth(width)
-                  sliderPosition.setValue(width / 2)
-                }}
-              >
-                {/* Enhanced Image (background - right side) */}
+              <Pressable onPress={toggleImage} style={styles.imageContainer}>
+                {/* Enhanced Image (base layer) */}
                 <Image
                   source={images[currentIndex].enhanced}
                   style={styles.mainImage}
                   resizeMode="cover"
                 />
 
-                {/* Original Image with Slider (overlay - left side) */}
+                {/* Original Image (overlay with crossfade) */}
                 <Animated.View
                   style={[
-                    styles.enhancedImageContainer,
+                    styles.originalImageOverlay,
                     {
-                      width: sliderPosition,
+                      opacity: crossfadeAnim,
                     },
                   ]}
                 >
@@ -434,35 +422,24 @@ export default function ResultScreen() {
                   />
                 </Animated.View>
 
-                {/* Slider Handle */}
-                <Animated.View
-                  {...panResponder.panHandlers}
-                  style={[
-                    styles.sliderHandle,
-                    {
-                      left: sliderPosition,
-                    },
-                  ]}
-                >
-                  <LinearGradient
-                    colors={['#D4AF37', '#F59E0B']}
-                    style={styles.sliderLine}
-                  />
-                  <BlurView intensity={80} tint="light" style={styles.sliderCircle}>
-                    <Text style={styles.sliderArrows}>{'←  →'}</Text>
-                  </BlurView>
-                </Animated.View>
-
-                {/* Before/After Labels */}
-                <View style={styles.labelContainer}>
-                  <BlurView intensity={60} tint="dark" style={styles.labelBlur}>
-                    <Text style={styles.labelText}>Before</Text>
-                  </BlurView>
-                  <BlurView intensity={60} tint="dark" style={styles.labelBlur}>
-                    <Text style={styles.labelText}>After</Text>
+                {/* Status Label */}
+                <View style={styles.tapLabelContainer}>
+                  <BlurView intensity={60} tint="dark" style={styles.tapLabelBlur}>
+                    <Text style={styles.tapLabelText}>
+                      {showingOriginal ? 'Original' : 'Enhanced'}
+                    </Text>
                   </BlurView>
                 </View>
-              </View>
+
+                {/* Tap Hint */}
+                <View style={styles.tapHintContainer}>
+                  <BlurView intensity={60} tint="dark" style={styles.tapHintBlur}>
+                    <Text style={styles.tapHintText}>
+                      Tap to see {showingOriginal ? 'enhanced' : 'original'}
+                    </Text>
+                  </BlurView>
+                </View>
+              </Pressable>
             </BlurView>
           </Animated.View>
 
@@ -617,62 +594,43 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  enhancedImageContainer: {
+  originalImageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  tapLabelContainer: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    bottom: 0,
+    top: 16,
+    left: 16,
+  },
+  tapLabelBlur: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
     overflow: 'hidden',
   },
-  sliderHandle: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-    transform: [{ translateX: -30 }],
-    zIndex: 10,
-  },
-  sliderLine: {
-    position: 'absolute',
-    width: 3,
-    height: '100%',
-  },
-  sliderCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderWidth: 2,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
-    overflow: 'hidden',
-  },
-  sliderArrows: {
+  tapLabelText: {
+    color: '#FFFFFF',
     fontSize: 14,
-    color: '#111827',
     fontWeight: '700',
+    letterSpacing: 0.3,
   },
-  labelContainer: {
+  tapHintContainer: {
     position: 'absolute',
     bottom: 16,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
-  labelBlur: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
+  tapHintBlur: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     overflow: 'hidden',
   },
-  labelText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '600',
+  tapHintText: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 13,
+    fontWeight: '500',
   },
   thumbnailSection: {
     height: 100,

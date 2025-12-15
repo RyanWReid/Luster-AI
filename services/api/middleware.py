@@ -4,8 +4,10 @@ Middleware for request tracking and monitoring
 
 import time
 import uuid
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
+
 from request_tracker import RequestTracker
 
 

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from '../lib/supabase'
+import { api } from '../lib/api'
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -124,24 +125,25 @@ class EnhancementService {
         console.log('Response was not valid JSON:', responseText)
         return false
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('===== CONNECTION TEST ERROR =====')
-      console.error('Error type:', error.constructor.name)
-      console.error('Error message:', error.message)
-      console.error('Error stack:', error.stack)
-      
+      const err = error instanceof Error ? error : new Error(String(error))
+      console.error('Error type:', err.constructor.name)
+      console.error('Error message:', err.message)
+      console.error('Error stack:', err.stack)
+
       // Check for common network errors
-      if (error.message.includes('Network request failed')) {
+      if (err.message.includes('Network request failed')) {
         console.error('🔴 Network request failed - server may be down or unreachable')
         console.error('Possible causes:')
         console.error('1. API server is not running')
         console.error('2. Incorrect IP address or port')
         console.error('3. Firewall blocking the connection')
         console.error('4. Mobile device not on same network')
-      } else if (error.message.includes('JSON Parse error')) {
+      } else if (err.message.includes('JSON Parse error')) {
         console.error('🔴 Server responded with non-JSON content')
       }
-      
+
       return false
     }
   }
@@ -229,11 +231,12 @@ class EnhancementService {
           error: errorText,
         })
         console.log('Falling back to base64 method...')
-      } catch (formError) {
+      } catch (formError: unknown) {
+        const err = formError instanceof Error ? formError : new Error(String(formError))
         console.error('❌ FormData method exception:', {
-          name: formError.name,
-          message: formError.message,
-          stack: formError.stack,
+          name: err.name,
+          message: err.message,
+          stack: err.stack,
         })
       }
       
@@ -292,12 +295,13 @@ class EnhancementService {
         })
         
         try {
-          const error = JSON.parse(errorText)
-          console.error('Parsed error:', error)
-          throw new Error(error.detail || `Failed to start enhancement: ${response.status}`)
-        } catch (e) {
-          if (e.message.includes('Failed to start enhancement')) {
-            throw e
+          const errorData = JSON.parse(errorText)
+          console.error('Parsed error:', errorData)
+          throw new Error(errorData.detail || `Failed to start enhancement: ${response.status}`)
+        } catch (e: unknown) {
+          const err = e instanceof Error ? e : new Error(String(e))
+          if (err.message.includes('Failed to start enhancement')) {
+            throw err
           }
           console.error('Could not parse error response as JSON')
           throw new Error(`Failed to start enhancement: ${response.status} - ${errorText}`)
@@ -350,39 +354,19 @@ class EnhancementService {
   }
 
   /**
-   * Get current job status
+   * Get current job status (uses retry for transient network errors)
    */
   async getJobStatus(jobId: string): Promise<JobStatusResponse> {
-    const token = await getAuthToken()
-
-    const headers: Record<string, string> = {}
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`
-    }
-
-    const response = await fetch(`${API_BASE_URL}/api/mobile/enhance/${jobId}/status`, {
-      headers
-    })
-
-    if (!response.ok) {
-      throw new Error('Failed to get job status')
-    }
-
-    return await response.json()
+    // Use the api client which has built-in retry for GET requests
+    return api.get<JobStatusResponse>(`/api/mobile/enhance/${jobId}/status`)
   }
 
   /**
-   * Get available enhancement styles
+   * Get available enhancement styles (uses retry for transient network errors)
    */
   async getAvailableStyles(): Promise<StyleInfo[]> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/mobile/styles`)
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch styles')
-      }
-
-      const data = await response.json()
+      const data = await api.get<{ styles: StyleInfo[] }>('/api/mobile/styles')
       return data.styles
     } catch (error) {
       console.error('Failed to get styles:', error)
@@ -395,7 +379,7 @@ class EnhancementService {
         },
         {
           id: 'flambient',
-          name: 'Flambient', 
+          name: 'Flambient',
           description: 'Bright, airy interior with crisp whites and flambient lighting'
         }
       ]
@@ -497,17 +481,11 @@ class EnhancementService {
   }
 
   /**
-   * Get user credit balance
+   * Get user credit balance (uses retry for transient network errors)
    */
   async getCreditBalance(): Promise<number> {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/mobile/credits`)
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch credits: ${response.status}`)
-      }
-
-      const data: CreditBalanceResponse = await response.json()
+      const data = await api.get<CreditBalanceResponse>('/api/mobile/credits')
       return data.balance
     } catch (error) {
       console.error('Error fetching credit balance:', error)

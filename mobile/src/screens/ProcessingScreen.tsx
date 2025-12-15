@@ -19,6 +19,7 @@ import { usePhotos } from '../context/PhotoContext'
 import { useListings } from '../context/ListingsContext'
 import enhancementService from '../services/enhancementService'
 import hapticFeedback from '../utils/haptics'
+import { useErrorHandler } from '../hooks/useErrorHandler'
 
 const { width } = Dimensions.get('window')
 
@@ -76,6 +77,7 @@ export default function ProcessingScreen() {
   const route = useRoute()
   const { selectedPhotos, setEnhancedPhotos } = usePhotos()
   const { addListing, updateListing, listings, isProcessing, markAsProcessing } = useListings()
+  const { handleError } = useErrorHandler()
   const firstImage = selectedPhotos[0] || null
 
   // Get parameters from previous screen
@@ -353,16 +355,15 @@ export default function ProcessingScreen() {
       } catch (error) {
         console.error('Enhancement failed:', error)
         hapticFeedback.notification('error')
-        Alert.alert(
-          'Enhancement Failed',
-          'There was an error processing your images. Please try again.',
-          [
-            {
-              text: 'OK',
-              onPress: () => navigation.navigate('Main' as never),
-            },
-          ]
-        )
+
+        // Use centralized error handler - handles all error types
+        handleError(error, {
+          showAlert: true,
+          onHandled: () => {
+            // Navigate back after any error
+            navigation.navigate('Main' as never)
+          },
+        })
       }
     }
 

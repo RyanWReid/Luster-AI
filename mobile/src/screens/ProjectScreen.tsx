@@ -280,7 +280,7 @@ export default function ProjectScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Save',
-          onPress: (newName) => {
+          onPress: (newName: string | undefined) => {
             if (newName && newName.trim()) {
               updateListingName(propertyData.id, newName.trim())
               hapticFeedback.notification('success')

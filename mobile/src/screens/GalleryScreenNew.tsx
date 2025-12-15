@@ -190,7 +190,7 @@ export default function GalleryScreenNew() {
     const hasRealImages = propertyImages.length > 0
 
     if (hasRealImages) {
-      return propertyImages.map((image, index) => ({
+      return propertyImages.map((image: { uri: string }, index: number) => ({
         id: `image-${index}`,
         uri: image,
         isEnhanced: index % 2 === 0,

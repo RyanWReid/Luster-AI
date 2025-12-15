@@ -4,6 +4,7 @@ Run this once to initialize the database schema.
 """
 
 import os
+
 from database import Base, engine
 
 # Use the production DATABASE_URL
