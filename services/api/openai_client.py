@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 import requests
 from dotenv import load_dotenv
 from openai import OpenAI
-from PIL import ExifTags, Image
+from PIL import Image
 
 load_dotenv()
 

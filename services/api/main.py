@@ -1,8 +1,6 @@
 import base64
 import json
 import os
-import shutil
-import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -24,22 +22,13 @@ from sqlalchemy.orm import Session
 # Register HEIF opener so PIL can handle HEIC files
 register_heif_opener()
 
-from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from admin import router as admin_router
 from auth import get_current_user, get_optional_user
 from auth_endpoints import router as auth_router
 from database import Asset, Credit, Job, JobEvent, JobStatus, Shoot, User, get_db
-from logger import (
-    LoggingMiddleware,
-    log_credit_transaction,
-    log_health_check,
-    log_job_created,
-    log_upload_completed,
-    log_upload_started,
-    logger,
-)
+from logger import LoggingMiddleware, logger
 from rate_limiter import RATE_LIMITS, limiter, rate_limit_exceeded_handler
 from revenue_cat import router as revenuecat_router
 from schemas import validate_uuid
@@ -1762,7 +1751,6 @@ def get_gallery(
 # Try to mount RQ Dashboard if Redis is available
 try:
     import redis
-    from rq import Queue
 
     redis_url = os.getenv("REDIS_URL")
     if redis_url:

@@ -3,13 +3,11 @@ import os
 import uuid
 from collections.abc import Generator
 from datetime import datetime
-from typing import Any
-
 from dotenv import load_dotenv
 from sqlalchemy import Column, DateTime
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy import ForeignKey, Integer, String, Text, create_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, relationship, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, Session, relationship, sessionmaker
 
 load_dotenv()
 

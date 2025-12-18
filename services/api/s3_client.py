@@ -2,8 +2,7 @@
 
 import logging
 import os
-from datetime import timedelta
-from typing import Dict, Optional
+from typing import Optional
 
 import boto3
 from botocore.config import Config
