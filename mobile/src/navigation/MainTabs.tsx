@@ -1,7 +1,7 @@
 import React from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
-import DashboardScreen from '../screens/DashboardScreenNew'
-import GalleryScreenNew from '../screens/GalleryScreenNew'
+import DashboardScreen from '../screens/DashboardScreen'
+import GalleryScreen from '../screens/GalleryScreen'
 import SettingsScreen from '../screens/SettingsScreen'
 import FloatingTabBar from '../components/FloatingTabBar'
 
@@ -22,7 +22,7 @@ export default function MainTabs() {
       }}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
-      <Tab.Screen name="Gallery" component={GalleryScreenNew} />
+      <Tab.Screen name="Gallery" component={GalleryScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   )

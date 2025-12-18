@@ -1,144 +1,91 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
-  TextInput,
   TouchableOpacity,
   FlatList,
   Image,
   Dimensions,
   ActivityIndicator,
+  Animated,
+  Easing,
+  Platform,
+  Alert,
   RefreshControl,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import Svg, { Path, Circle } from 'react-native-svg'
+import { BlurView } from 'expo-blur'
+import Svg, { Path, Circle, Rect } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { useListings } from '../context/ListingsContext'
 import { usePhotos } from '../context/PhotoContext'
+import hapticFeedback from '../utils/haptics'
 
-const { width } = Dimensions.get('window')
+const { width, height } = Dimensions.get('window')
 
 // Default property image
 const defaultPropertyImage = require('../../assets/photo.png')
+const lusterLogoWhite = require('../../assets/luster-white-logo.png')
 
-// Luster logo for button
-const lusterWhiteLogo = require('../../assets/luster-white-logo.png')
-
-// Search icon
-const SearchIcon = () => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-      stroke="#9CA3AF"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+// Modern coin icon
+const CoinIcon = ({ size = 20, color = '#D4AF37' }: { size?: number; color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2" />
+    <Text style={{
+      position: 'absolute',
+      left: size/2 - 4,
+      top: size/2 - 8,
+      fontSize: 14,
+      fontWeight: '700',
+      color: color
+    }}>C</Text>
   </Svg>
 )
 
-// Star icon for the main button
-const StarIcon = () => (
-  <Svg width={28} height={28} viewBox="0 0 24 24" fill="white">
-    <Path
-      d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
-      fill="white"
-    />
+
+// Star icon
+const StarIcon = ({ size = 16, color = '#D4AF37' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+    <Path d="M12 2l2.582 7.953h8.364l-6.764 4.914 2.582 7.953L12 17.906 5.236 22.82l2.582-7.953L1.054 9.953h8.364L12 2z" />
   </Svg>
 )
 
-// Settings icon
-const SettingsIcon = ({ color = '#9CA3AF' }: { color?: string }) => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+
+// Trending icon
+const TrendingIcon = ({ size = 20, color = '#666' }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Path
-      d="M12 15a3 3 0 100-6 3 3 0 000 6z"
+      d="M23 6l-9.5 9.5-5-5L1 18"
       stroke={color}
-      strokeWidth="2"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
     <Path
-      d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+      d="M17 6h6v6"
       stroke={color}
-      strokeWidth="2"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
     />
   </Svg>
 )
 
-// Coin icon for credits
-const CoinIcon = ({ color = '#F59E0B' }: { color?: string }) => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth="2" fill="none" />
-    <Path
-      d="M12 17V7M15 9.5A2.5 2.5 0 0012.5 7h-1A2.5 2.5 0 009 9.5 2.5 2.5 0 0011.5 12H12.5A2.5 2.5 0 0115 14.5 2.5 2.5 0 0112.5 17h-1A2.5 2.5 0 019 14.5"
-      stroke={color}
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-)
-
-// Grid view icon
-const GridIcon = ({ color = '#6B7280' }: { color?: string }) => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M3 3h7v7H3V3zM14 3h7v7h-7V3zM3 14h7v7H3v-7zM14 14h7v7h-7v-7z"
-      stroke={color}
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-)
-
-// List view icon
-const ListIcon = ({ color = '#6B7280' }: { color?: string }) => (
-  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-    <Path
-      d="M4 6h16M4 12h16M4 18h16"
-      stroke={color}
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-)
-
-// Arrow up/down icon for sorting
-const ArrowIcon = ({ direction = 'down', color = '#6B7280' }: { direction?: 'up' | 'down', color?: string }) => (
-  <Svg width={14} height={14} viewBox="0 0 24 24" fill="none">
-    <Path
-      d={direction === 'down' ? "M6 9l6 6 6-6" : "M18 15l-6-6-6 6"}
-      stroke={color}
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </Svg>
-)
-
-// Mock data for properties
+// Mock properties data
 const mockProperties = [
   {
     id: '1',
-    address: '1234 King Blvd',
+    address: '1234 King Boulevard',
     price: '$550,000',
     beds: 5,
     baths: 4,
-    squareFeet: 2850,
+    squareFeet: '2,850',
     image: defaultPropertyImage,
-    images: [], // No enhanced images for mock data
-    originalImages: [],
-    isEnhanced: false,
-    propertyType: 'Single Family',
-    yearBuilt: 2020,
-    lotSize: '0.25 acres',
+    status: 'Enhanced',
+    date: '2 hours ago',
   },
   {
     id: '2',
@@ -146,14 +93,10 @@ const mockProperties = [
     price: '$425,000',
     beds: 3,
     baths: 2,
-    squareFeet: 1650,
+    squareFeet: '1,650',
     image: defaultPropertyImage,
-    images: [],
-    originalImages: [],
-    isEnhanced: false,
-    propertyType: 'Condo',
-    yearBuilt: 2018,
-    lotSize: 'N/A',
+    status: 'Processing',
+    date: '5 hours ago',
   },
   {
     id: '3',
@@ -161,41 +104,42 @@ const mockProperties = [
     price: '$750,000',
     beds: 4,
     baths: 3,
-    squareFeet: 3200,
+    squareFeet: '3,200',
     image: defaultPropertyImage,
-    images: [],
-    originalImages: [],
-    isEnhanced: false,
-    propertyType: 'Single Family',
-    yearBuilt: 2019,
-    lotSize: '0.35 acres',
+    status: 'Enhanced',
+    date: 'Yesterday',
+  },
+  {
+    id: '4',
+    address: '321 Maple Drive',
+    price: '$680,000',
+    beds: 4,
+    baths: 3.5,
+    squareFeet: '2,950',
+    image: defaultPropertyImage,
+    status: 'Enhanced',
+    date: '3 days ago',
   },
 ]
 
-type FilterTag = 'Recent' | 'Price'
-type ViewMode = 'grid' | 'list'
-type SortOrder = 'asc' | 'desc'
-
-export default function DashboardScreen() {
+export default function DashboardScreenNew() {
   const navigation = useNavigation()
-  const { listings, syncFromBackend } = useListings()
+  const { listings, isLoading: isLoadingListings, clearListings, syncFromBackend } = useListings()
   const { creditBalance, isLoadingCredits } = usePhotos()
-  const [selectedFilter, setSelectedFilter] = useState<FilterTag>('Recent')
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
-  const [searchText, setSearchText] = useState('')
-  const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const showMockData = false // Toggle this to true to show mock data cards
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // Sync listings from backend on mount
+  // Sync listings from backend on mount (restore after reinstall)
   useEffect(() => {
-    console.log('🏠 DashboardScreen mounted - syncing listings from backend')
+    console.log('🏠 DashboardScreenNew mounted - syncing listings from backend')
     syncFromBackend()
-  }, []) // Empty deps array = run once on mount
+  }, [])
 
   // Pull-to-refresh handler
   const handleRefresh = async () => {
     console.log('🔄 Pull-to-refresh triggered')
     setIsRefreshing(true)
+    hapticFeedback.light()
     try {
       await syncFromBackend()
     } finally {
@@ -203,35 +147,80 @@ export default function DashboardScreen() {
     }
   }
 
-  // Debug: Log listings
-  console.log('DashboardScreen - listings count:', listings.length)
-  if (listings.length > 0) {
-    console.log('DashboardScreen - first listing:', listings[0])
-    console.log('DashboardScreen - first listing images:', listings[0].images)
+  // Use real listings if available, otherwise use mock data
+  const displayData = listings.length > 0 ? listings : (showMockData ? mockProperties : [])
+
+  // Calculate real counts
+  const propertyCount = listings.length
+  const totalPhotoCount = listings.reduce((total, listing) => {
+    const imageCount = listing.images?.length || 0
+    return total + imageCount
+  }, 0)
+
+  const handleClearAll = () => {
+    Alert.alert(
+      'Clear All Projects?',
+      'This will permanently delete all projects and their photos. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete All',
+          style: 'destructive',
+          onPress: () => {
+            clearListings()
+            hapticFeedback.notification('success')
+          },
+        },
+      ]
+    )
   }
 
-  const filterTags: FilterTag[] = ['Recent', 'Price']
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current
+  const slideAnim = useRef(new Animated.Value(30)).current
+  const scaleAnim = useRef(new Animated.Value(0.95)).current
+  const blobAnim = useRef(new Animated.Value(0)).current
 
-  const handleFilterPress = (tag: FilterTag) => {
-    if (selectedFilter === tag) {
-      // If same filter, toggle sort order
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
-    } else {
-      // If different filter, set it and default sort order
-      setSelectedFilter(tag)
-      setSortOrder(tag === 'Price' ? 'asc' : 'desc')
-    }
-  }
+  useEffect(() => {
+    // Entrance animation
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start()
+
+    // Soft blob animation for background
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(blobAnim, {
+          toValue: 1,
+          duration: 8000,
+          useNativeDriver: false,
+        }),
+        Animated.timing(blobAnim, {
+          toValue: 0,
+          duration: 8000,
+          useNativeDriver: false,
+        }),
+      ])
+    ).start()
+  }, [])
 
   const handleEnhancePhoto = () => {
-    // Navigate to new listing screen
     navigation.navigate('NewListing' as never)
-  }
-
-  const handleProfile = () => {
-    // Navigate to profile/settings screen
-    console.log('Navigate to profile')
-    // navigation.navigate('Profile' as never)
   }
 
   const handleCreditsPress = () => {
@@ -239,235 +228,276 @@ export default function DashboardScreen() {
   }
 
   const handlePropertyPress = (item: any) => {
-    // Pass the full property data including images array
-    navigation.navigate('Project' as never, { 
-      property: {
-        id: item.id,
-        address: item.address,
-        price: item.price,
-        beds: item.beds,
-        baths: item.baths,
-        image: item.image,
-        images: item.images, // Pass all enhanced images
-        originalImages: item.originalImages, // Pass original images too
-        isEnhanced: item.isEnhanced,
-        // Add any additional property data if available
-        squareFeet: item.squareFeet,
-        propertyType: item.propertyType,
-        yearBuilt: item.yearBuilt,
-        lotSize: item.lotSize,
-        mlsNumber: item.mlsNumber,
-        listingStatus: item.listingStatus,
-        description: item.description,
-      }
-    } as never)
+    // Navigate based on property status
+    if (item.status === 'processing') {
+      // Property is still processing - go to ProcessingScreen
+      navigation.navigate('Processing' as never, {
+        propertyId: item.id,
+        photos: item.originalImages?.map((img: any) => img.uri) || [],
+        photoCount: item.originalImages?.length || 0,
+      } as never)
+    } else if (item.status === 'ready') {
+      // Processing done, ready to save - go to ResultScreen
+      navigation.navigate('Result' as never, {
+        propertyId: item.id,
+        enhancedPhotos: item.images?.map((img: any) => img.uri) || [],
+        originalPhotos: item.originalImages?.map((img: any) => img.uri) || [],
+      } as never)
+    } else {
+      // Completed - go to Project gallery
+      navigation.navigate('Project' as never, { property: item } as never)
+    }
   }
 
-  const renderPropertyCard = ({ item }: { item: any }) => {
-    if (viewMode === 'list') {
-      // List view - original full-width card design
-      return (
-        <TouchableOpacity
-          style={styles.propertyCardList}
-          activeOpacity={0.9}
-          onPress={() => handlePropertyPress(item)}
-        >
-          <Image source={item.image} style={styles.propertyImageList} />
-          {item.status === 'processing' ? (
-            <View style={styles.processingBadgeList}>
-              <ActivityIndicator size="small" color="#F59E0B" style={{ marginRight: 4 }} />
-              <Text style={styles.processingTextList}>Processing</Text>
-            </View>
-          ) : item.status === 'failed' ? (
-            <View style={styles.failedBadgeList}>
-              <Text style={styles.failedTextList}>Failed</Text>
-            </View>
-          ) : item.isEnhanced && (
-            <View style={styles.enhancedBadgeList}>
-              <Text style={styles.enhancedTextList}>Enhanced</Text>
-            </View>
-          )}
-          <View style={styles.propertyInfoList}>
-            <Text style={styles.propertyAddressList}>{item.address}</Text>
-            <View style={styles.propertyDetailsList}>
-              <Text style={styles.propertyPriceList}>{item.price}</Text>
-              <Text style={styles.propertySpecsList}>
-                {item.beds} Bed   {item.baths} Bath
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      )
+
+  const AnimatedCard = ({ item, index }: { item: any; index: number }) => {
+    const cardScale = useRef(new Animated.Value(1)).current
+    const spinAnim = useRef(new Animated.Value(0)).current
+    const pulseAnim = useRef(new Animated.Value(1)).current
+    const glowAnim = useRef(new Animated.Value(0)).current
+
+    useEffect(() => {
+      if (item.status === 'processing') {
+        // Spinning loader animation
+        Animated.loop(
+          Animated.timing(spinAnim, {
+            toValue: 1,
+            duration: 2000,
+            easing: Easing.linear,
+            useNativeDriver: true,
+          })
+        ).start()
+      } else if (item.status === 'ready') {
+        // Pulsing checkmark animation
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(pulseAnim, {
+              toValue: 1.15,
+              duration: 1000,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseAnim, {
+              toValue: 1,
+              duration: 1000,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        ).start()
+
+        // Glowing border animation (using opacity for native driver support)
+        Animated.loop(
+          Animated.sequence([
+            Animated.timing(glowAnim, {
+              toValue: 1,
+              duration: 1500,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowAnim, {
+              toValue: 0,
+              duration: 1500,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        ).start()
+      }
+    }, [item.status])
+
+    const spin = spinAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '360deg'],
+    })
+
+    const glowOpacity = glowAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.4, 1],
+    })
+
+    const handlePressIn = () => {
+      Animated.spring(cardScale, {
+        toValue: 0.97,
+        friction: 8,
+        tension: 100,
+        useNativeDriver: true,
+      }).start()
     }
 
-    // Grid view - compact 2-column layout
+    const handlePressOut = () => {
+      Animated.spring(cardScale, {
+        toValue: 1,
+        friction: 8,
+        tension: 100,
+        useNativeDriver: true,
+      }).start()
+    }
+
+    const isProcessing = item.status === 'processing'
+    const isReady = item.status === 'ready'
+
     return (
-      <TouchableOpacity
-        style={styles.propertyCard}
-        activeOpacity={0.9}
-        onPress={() => handlePropertyPress(item)}
+      <Animated.View
+        style={[
+          styles.gridCard,
+          isReady && styles.gridCardReady,
+          {
+            transform: [{ scale: cardScale }],
+            opacity: fadeAnim,
+          },
+        ]}
       >
-        <Image source={item.image} style={styles.propertyImage} />
-        {item.status === 'processing' ? (
-          <View style={styles.processingBadgeGrid}>
-            <ActivityIndicator size="small" color="#F59E0B" style={{ marginRight: 4 }} />
-            <Text style={styles.processingTextGrid}>Processing</Text>
-          </View>
-        ) : item.status === 'failed' ? (
-          <View style={styles.failedBadgeGrid}>
-            <Text style={styles.failedTextGrid}>Failed</Text>
-          </View>
-        ) : item.isEnhanced && (
-          <View style={styles.enhancedBadgeGrid}>
-            <Text style={styles.enhancedTextGrid}>Enhanced</Text>
-          </View>
+        {/* Glowing border effect for ready state */}
+        {isReady && (
+          <Animated.View
+            style={[
+              styles.glowBorder,
+              {
+                opacity: glowOpacity,
+              },
+            ]}
+          />
         )}
-        <View style={styles.propertyInfo}>
-          <Text style={styles.propertyAddress} numberOfLines={1}>
-            {item.address}
-          </Text>
-          <View style={styles.propertyDetails}>
-            <Text style={styles.propertyPrice}>{item.price}</Text>
-            <Text style={styles.propertySpecs}>
-              {item.beds} Bed • {item.baths} Bath
-            </Text>
+        <TouchableOpacity
+          activeOpacity={1}
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          onPress={() => handlePropertyPress(item)}
+        >
+          <View style={styles.cardImageContainer}>
+            <Image
+              source={item.image}
+              style={styles.gridImage}
+            />
+
+            {/* Processing State Overlay */}
+            {isProcessing && (
+              <BlurView intensity={80} tint="light" style={styles.processingOverlay}>
+                <View style={styles.spinnerContainer}>
+                  <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                    <Svg width={64} height={64} viewBox="0 0 64 64">
+                      <Circle
+                        cx="32"
+                        cy="32"
+                        r="26"
+                        stroke="#6B7280"
+                        strokeWidth="4.5"
+                        fill="none"
+                        strokeDasharray="130, 32"
+                        strokeLinecap="round"
+                      />
+                    </Svg>
+                  </Animated.View>
+                </View>
+              </BlurView>
+            )}
+
+            {/* Ready State: Full card blur with centered checkmark */}
+            {isReady && (
+              <BlurView intensity={80} tint="light" style={styles.readyOverlay}>
+                {/* Circle background for checkmark */}
+                <Animated.View
+                  style={[
+                    styles.checkmarkCircle,
+                    {
+                      transform: [{ scale: pulseAnim }],
+                    },
+                  ]}
+                >
+                  <Svg width={52} height={52} viewBox="0 0 24 24" fill="none">
+                    <Path
+                      d="M20 6L9 17l-5-5"
+                      stroke="#4A90E2"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                </Animated.View>
+              </BlurView>
+            )}
           </View>
-        </View>
-      </TouchableOpacity>
+          {/* Bottom text overlay (only show when NOT ready and NOT processing) */}
+          {!isReady && !isProcessing && (
+            <BlurView intensity={60} tint="light" style={styles.gridOverlay}>
+              <Text style={styles.gridAddress} numberOfLines={2}>
+                {item.address}
+              </Text>
+            </BlurView>
+          )}
+        </TouchableOpacity>
+      </Animated.View>
     )
   }
 
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Dashboard</Text>
-          <View style={styles.headerRight}>
-            <TouchableOpacity
-              style={styles.creditButton}
-              onPress={handleCreditsPress}
-              activeOpacity={0.7}
-            >
-              <LinearGradient
-                colors={['#FEF3C7', '#FDE68A']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.creditBadge}
-              >
-                <CoinIcon />
-                {isLoadingCredits ? (
-                  <ActivityIndicator size="small" color="#F59E0B" style={styles.creditLoading} />
-                ) : (
-                  <Text style={styles.creditText}>{creditBalance}</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.settingsButton}
-              onPress={handleProfile}
-            >
-              <SettingsIcon color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-        </View>
+    <View style={styles.container}>
+      {/* Iridescent gradient mesh background */}
+      <Animated.View style={StyleSheet.absoluteFillObject}>
+        <LinearGradient
+          colors={['#FFF5F7', '#F7F0FF', '#F0F8FF', '#FFF8F0']}
+          locations={[0, 0.3, 0.6, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFillObject}
+        />
+      </Animated.View>
 
-        {/* Search Bar */}
-        <View style={styles.searchContainer}>
-          <SearchIcon />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search"
-            placeholderTextColor="#9CA3AF"
-            value={searchText}
-            onChangeText={setSearchText}
-          />
-        </View>
+      {/* Organic blob animations */}
+      <Animated.View
+        style={[
+          styles.blobContainer1,
+          {
+            transform: [
+              {
+                translateY: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 30],
+                }),
+              },
+              {
+                translateX: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -20],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(255, 182, 193, 0.15)', 'rgba(255, 218, 185, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
 
-        {/* Filter Tags and View Toggle */}
-        <View style={styles.filterSection}>
-          <View style={styles.filterContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyboardShouldPersistTaps='handled'
-              contentContainerStyle={styles.filterContent}
-            >
-              {filterTags.map((tag) => (
-                <TouchableOpacity
-                  key={tag}
-                  style={[
-                    styles.filterTag,
-                    selectedFilter === tag && styles.filterTagActive,
-                  ]}
-                  onPress={() => handleFilterPress(tag)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.filterTagContent}>
-                    <Text
-                      style={[
-                        styles.filterTagText,
-                        selectedFilter === tag && styles.filterTagTextActive,
-                      ]}
-                      allowFontScaling={false}
-                      numberOfLines={1}
-                    >
-                      {tag}
-                    </Text>
-                    {selectedFilter === tag && (
-                      <ArrowIcon
-                        direction={sortOrder === 'asc' ? 'up' : 'down'}
-                        color={selectedFilter === tag ? '#4F46E5' : '#6B7280'}
-                      />
-                    )}
-                  </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-          <View style={styles.viewToggle}>
-            <TouchableOpacity
-              style={[styles.viewButton, viewMode === 'grid' && styles.viewButtonActive]}
-              onPress={() => setViewMode('grid')}
-            >
-              <GridIcon color={viewMode === 'grid' ? '#4F46E5' : '#9CA3AF'} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.viewButton, viewMode === 'list' && styles.viewButtonActive]}
-              onPress={() => setViewMode('list')}
-            >
-              <ListIcon color={viewMode === 'list' ? '#4F46E5' : '#9CA3AF'} />
-            </TouchableOpacity>
-          </View>
-        </View>
+      <Animated.View
+        style={[
+          styles.blobContainer2,
+          {
+            transform: [
+              {
+                translateY: blobAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, -25],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(230, 190, 255, 0.15)', 'rgba(190, 220, 255, 0.1)', 'transparent']}
+          style={styles.blob}
+        />
+      </Animated.View>
 
-        {/* Property List */}
-        <FlatList
-          data={[
-            ...listings.map(listing => ({
-              id: listing.id,
-              address: listing.address,
-              price: listing.price,
-              beds: listing.beds,
-              baths: listing.baths,
-              image: listing.image,
-              images: listing.images, // Include all enhanced images
-              originalImages: listing.originalImages, // Include original images
-              isEnhanced: listing.isEnhanced,
-              squareFeet: listing.squareFeet,
-              status: listing.status, // Include status for processing indicator
-            })),
-            ...mockProperties,
-          ]}
-          renderItem={renderPropertyCard}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={[
-            styles.listContent,
-            viewMode === 'grid' && styles.gridContent
-          ]}
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView
           showsVerticalScrollIndicator={false}
-          numColumns={viewMode === 'grid' ? 2 : 1}
-          key={viewMode} // Force re-render when switching views
+          style={styles.scrollView}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -476,424 +506,474 @@ export default function DashboardScreen() {
               colors={['#D4AF37']}
             />
           }
-        />
-      </View>
-
-      {/* Custom Bottom Navigation */}
-      <View style={styles.bottomNavWrapper}>
-        <LinearGradient
-          colors={['#FFEDC3', '#F8F8F8']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.bottomNav}
         >
-          <View style={styles.bottomNavContent}>
-            {/* Content removed - just keeping the gradient bar */}
-          </View>
-        </LinearGradient>
-
-        {/* Center Enhance Button - Outside gradient to avoid clipping */}
-        <TouchableOpacity
-          onPress={handleEnhancePhoto}
-          activeOpacity={0.8}
-          style={styles.enhanceButtonContainer}
-        >
-          <LinearGradient
-            colors={['#FFB535', '#FFCF55']}  // Orange to lighter yellow gradient
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}  // Horizontal gradient left to right
-            style={styles.enhanceButton}
+          {/* Header */}
+          <Animated.View
+            style={[
+              styles.header,
+              {
+                opacity: fadeAnim,
+                transform: [{ translateY: slideAnim }],
+              },
+            ]}
           >
-            <Image source={lusterWhiteLogo} style={styles.lusterLogo} />
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+            <View>
+              <Text style={styles.greeting}>Good afternoon</Text>
+              <Text style={styles.title}>Your Properties</Text>
+            </View>
+
+            <View style={styles.headerRight}>
+              <TouchableOpacity
+                onPress={handleCreditsPress}
+                style={styles.creditButton}
+                activeOpacity={0.7}
+              >
+                <BlurView intensity={60} tint="light" style={styles.creditBlur}>
+                  <CoinIcon size={18} />
+                  <Text style={styles.creditText}>{creditBalance || 10}</Text>
+                </BlurView>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+
+          {/* Stats Cards */}
+          <Animated.View
+            style={[
+              styles.statsContainer,
+              {
+                opacity: fadeAnim,
+                transform: [{ scale: scaleAnim }],
+              },
+            ]}
+          >
+            <BlurView intensity={60} tint="light" style={styles.statCard}>
+              <Text style={styles.statNumber}>{propertyCount}</Text>
+              <Text style={styles.statLabel}>Properties</Text>
+            </BlurView>
+
+            <BlurView intensity={60} tint="light" style={styles.statCard}>
+              <Text style={styles.statNumber}>{totalPhotoCount}</Text>
+              <Text style={styles.statLabel}>Photos</Text>
+            </BlurView>
+
+            <BlurView intensity={60} tint="light" style={styles.statCard}>
+              <Text style={styles.statNumber}>{creditBalance || 0}</Text>
+              <Text style={styles.statLabel}>Credits</Text>
+            </BlurView>
+          </Animated.View>
+
+
+          {/* Recent Properties - Always show */}
+          <Animated.View
+            style={[
+              styles.propertiesSection,
+              {
+                opacity: fadeAnim,
+              },
+            ]}
+          >
+            <View style={styles.sectionHeader}>
+              <TouchableOpacity
+                activeOpacity={1}
+                onLongPress={handleClearAll}
+                delayLongPress={1000}
+              >
+                <Text style={styles.sectionTitle}>Recent Properties</Text>
+              </TouchableOpacity>
+              {displayData.length > 0 && (
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('AllProperties' as never)}
+                >
+                  <Text style={styles.seeAll}>See All</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {displayData.length > 0 ? (
+              <FlatList
+                data={displayData.slice(0, 4)}
+                renderItem={({ item, index }) => <AnimatedCard item={item} index={index} />}
+                keyExtractor={(item) => item.id}
+                horizontal={false}
+                numColumns={2}
+                scrollEnabled={false}
+                columnWrapperStyle={styles.propertyRow}
+                contentContainerStyle={styles.propertyGrid}
+              />
+            ) : (
+              <BlurView intensity={40} tint="light" style={styles.emptyStateCard}>
+                <View style={styles.emptyStateLogoContainer}>
+                  <Image
+                    source={lusterLogoWhite}
+                    style={styles.emptyStateLogo}
+                    resizeMode="contain"
+                  />
+                </View>
+                <Text style={styles.emptyStateText}>
+                  Get started by pressing{' '}
+                  <View style={styles.emptyStateLogoInlineContainer}>
+                    <Image source={lusterLogoWhite} style={styles.emptyStateLogoInline} resizeMode="contain" />
+                  </View>
+                </Text>
+              </BlurView>
+            )}
+          </Animated.View>
+
+          <View style={styles.bottomSpacer} />
+        </ScrollView>
+
+        {/* Bottom Fade Gradient */}
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', 'rgba(255,255,255,0.6)', 'rgba(255,255,255,0.95)', 'rgba(255,255,255,1)']}
+          locations={[0, 0.3, 0.7, 1]}
+          style={styles.bottomFadeGradient}
+          pointerEvents="none"
+        />
+      </SafeAreaView>
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'white',
+    backgroundColor: '#FFFFFF',
   },
-  content: {
+  backgroundGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  // Organic Blobs
+  blobContainer1: {
+    position: 'absolute',
+    top: -100,
+    left: -100,
+    width: 400,
+    height: 400,
+  },
+  blobContainer2: {
+    position: 'absolute',
+    bottom: -150,
+    right: -150,
+    width: 450,
+    height: 450,
+  },
+  blob: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 999,
+  },
+  safeArea: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
   },
   header: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 24,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 10,
-    paddingBottom: 20,
+    alignItems: 'flex-start',
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    marginTop: 8,
+  },
+  greeting: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#666',
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 34,
+    fontWeight: '700',
+    color: '#000',
+    letterSpacing: -0.5,
   },
   creditButton: {
-    borderRadius: 20,
+    // Removed extra styling
   },
-  creditBadge: {
+  creditBlur: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
     gap: 6,
   },
   creditText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#92400E',
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#000',
   },
-  creditLoading: {
-    marginLeft: 4,
-  },
-  settingsButton: {
-    padding: 4,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  filterContainer: {
-    flex: 1,
-    height: 44,
-    maxHeight: 44,
-  },
-  filterContent: {
+  // Stats Section
+  statsContainer: {
+    flexDirection: 'row',
     paddingHorizontal: 24,
-    alignItems: 'center', // Center items vertically
-    paddingVertical: 10,
+    marginBottom: 24,
+    gap: 12,
   },
-  filterTag: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
+  statCard: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
-    marginRight: 12,
-    height: 40, // Fixed height
-    justifyContent: 'center', // Center text vertically
-    alignItems: 'center', // Center text horizontally
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    overflow: 'hidden',
   },
-  filterTagActive: {
-    backgroundColor: '#FEF3C7',
-    borderColor: '#F59E0B',
-    borderWidth: 1,
-  },
-  filterTagText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#374151', // Darker gray for better visibility
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  filterTagTextActive: {
-    color: '#78350F', // Even darker brown for active state
+  statNumber: {
+    fontSize: 24,
     fontWeight: '700',
+    color: '#000',
+    letterSpacing: -0.5,
   },
-  searchContainer: {
+  statLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 4,
+  },
+  statTrend: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    marginHorizontal: 24,
-    marginBottom: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    marginTop: 8,
+    gap: 4,
   },
-  searchInput: {
-    flex: 1,
-    marginLeft: 12,
-    fontSize: 16,
-    color: '#111827',
-  },
-  listContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 100,
-  },
-  propertyCard: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    marginBottom: 16,
-    marginHorizontal: 6,
-    flex: 1,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  propertyImage: {
-    width: '100%',
-    height: 140,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  propertyInfo: {
-    padding: 12,
-  },
-  propertyAddress: {
-    fontSize: 14,
+  statChange: {
+    fontSize: 11,
     fontWeight: '600',
-    color: '#111827',
-    marginBottom: 6,
+    color: '#4CAF50',
   },
-  propertyDetails: {
+  // Properties Section
+  propertiesSection: {
+    paddingHorizontal: 24,
+  },
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 16,
   },
-  propertyPrice: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#4F46E5',
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#000',
+    letterSpacing: -0.3,
   },
-  propertySpecs: {
-    fontSize: 12,
-    color: '#9CA3AF',
+  seeAll: {
+    fontSize: 15,
+    color: '#D4AF37',
+    fontWeight: '500',
   },
-  bottomNavWrapper: {
+  propertyGrid: {
+    gap: 12,
+  },
+  propertyRow: {
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  // Grid Card
+  gridCard: {
+    flex: 1,
+    marginHorizontal: 6,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardImageContainer: {
+    position: 'relative',
+  },
+  gridImage: {
+    width: '100%',
+    height: 140,
+  },
+  iridescenOverlay: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    overflow: 'visible', // Allow button to float
+    height: 80,
   },
-  bottomNav: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 20, // Reduced from 34 (40% less) - still accounts for home indicator
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: -2,
-    },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
-    elevation: 10,
-    overflow: 'hidden', // Ensure gradient respects border radius
-  },
-  bottomNavContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12, // Reduced from 20 (40% less)
-    paddingBottom: 24,  // Reduced from 12 (40% less)
-    paddingHorizontal: 24,
-    position: 'relative',
-  },
-  bottomNavSpacer: {
-    width: 40,
-  },
-  bottomNavButton: {
-    padding: 8,
-  },
-  enhanceButtonContainer: {
+  gridOverlay: {
     position: 'absolute',
-    left: '50%',
-    transform: [{ translateX: -32 }],
-    bottom: 28, // Adjusted for shorter nav height
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 72,
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    justifyContent: 'flex-end',
+    borderBottomLeftRadius: 16,
+    borderBottomRightRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
-  enhanceButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  gridOverlayContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  // Processing State
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#8B5CF6',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 10,
   },
-  lusterLogo: {
+  spinnerContainer: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  // Ready State
+  gridCardReady: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    shadowColor: '#A0C4FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+  },
+  glowBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+    borderWidth: 3,
+    borderColor: 'rgba(160, 196, 255, 0.6)',
+    pointerEvents: 'none',
+  },
+  readyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(230, 240, 255, 0.25)',
+  },
+  checkmarkCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#A0C4FF',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(160, 196, 255, 0.4)',
+  },
+  gridPrice: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#000',
+    letterSpacing: -0.3,
+  },
+  gridAddress: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    lineHeight: 20,
+    letterSpacing: 0.1,
+  },
+  // Empty State
+  emptyStateCard: {
+    padding: 48,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  emptyStateLogoContainer: {
+    width: 48,
+    height: 48,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.4,
+  },
+  emptyStateLogo: {
+    width: 40,
+    height: 40,
+    opacity: 1,
+  },
+  emptyStateLogoInlineContainer: {
+    width: 20,
+    height: 20,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0.5,
+    marginHorizontal: 4,
+  },
+  emptyStateLogoInline: {
+    width: 16,
+    height: 16,
+    opacity: 1,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 16,
+    fontWeight: '500',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  // Action Icons Row (unused but kept for future)
+  actionIconsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  actionIcon: {
     width: 38,
     height: 38,
-    resizeMode: 'contain',
-  },
-  // New styles for grid/list view and updated filters
-  filterSection: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    height: 44,
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
-  filterTagContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  bottomSpacer: {
+    height: 100,
   },
-  viewToggle: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingRight: 24,
-  },
-  viewButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-  },
-  viewButtonActive: {
-    backgroundColor: '#EEF2FF',
-  },
-  gridContent: {
-    paddingHorizontal: 18,
-    paddingBottom: 100,
-  },
-  // List view styles - matching original design
-  propertyCardList: {
-    backgroundColor: 'white',
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  propertyImageList: {
-    width: '100%',
-    height: 200,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-  },
-  propertyInfoList: {
-    padding: 16,
-  },
-  propertyAddressList: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  propertyDetailsList: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  propertyPriceList: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  propertySpecsList: {
-    fontSize: 14,
-    color: '#9CA3AF',
-  },
-  enhancedBadgeList: {
+  bottomFadeGradient: {
     position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    zIndex: 1,
-  },
-  enhancedTextList: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#16A34A',
-    textTransform: 'uppercase',
-  },
-  enhancedBadgeGrid: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: '#DCFCE7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  enhancedTextGrid: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#16A34A',
-    textTransform: 'uppercase',
-  },
-  // Processing badge styles
-  processingBadgeList: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    zIndex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  processingTextList: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#92400E',
-    textTransform: 'uppercase',
-  },
-  processingBadgeGrid: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  processingTextGrid: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#92400E',
-    textTransform: 'uppercase',
-  },
-  // Failed badge styles
-  failedBadgeList: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    zIndex: 1,
-  },
-  failedTextList: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#DC2626',
-    textTransform: 'uppercase',
-  },
-  failedBadgeGrid: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    backgroundColor: '#FEE2E2',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  failedTextGrid: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#DC2626',
-    textTransform: 'uppercase',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
   },
 })

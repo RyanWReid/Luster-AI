@@ -10,7 +10,7 @@ import {
   Alert,
   Share,
 } from 'react-native'
-import { triggerHaptic } from '../utils/haptic'
+import { hapticFeedback } from '../utils/haptics'
 import { copyToClipboard } from '../utils/clipboard'
 import Svg, { Path, Circle, Rect } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
@@ -120,7 +120,7 @@ export default function ToolsView({ propertyData }: ToolsViewProps) {
 
   const generateMLSDescription = async () => {
     setIsGenerating(true)
-    triggerHaptic('medium')
+    hapticFeedback.medium()
 
     // Simulate AI generation (replace with actual API call)
     setTimeout(() => {
@@ -134,14 +134,14 @@ export default function ToolsView({ propertyData }: ToolsViewProps) {
 
       setGeneratedDescription(descriptions[selectedTone])
       setIsGenerating(false)
-      triggerHaptic('medium')
+      hapticFeedback.medium()
     }, 2000)
   }
 
   const handleCopyDescription = async () => {
     await copyToClipboard(generatedDescription)
     setCopied(true)
-    triggerHaptic('light')
+    hapticFeedback.light()
     
     setTimeout(() => {
       setCopied(false)

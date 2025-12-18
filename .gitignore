@@ -59,6 +59,18 @@ venv.bak/
 tmp/
 temp/
 
+# Test/debug image outputs
+**/output_*.jpg
+**/output_*.png
+**/*_mask.png
+**/test_*.png
+**/test_*.jpg
+**/*_copy.png
+**/image copy.png
+
+# Worker pipeline test artifacts
+services/worker/pipeline/
+
 # MCP servers (exclude figma)
 mcp-servers/figma-mcp/OpenAI/
 services/api/.env.production
