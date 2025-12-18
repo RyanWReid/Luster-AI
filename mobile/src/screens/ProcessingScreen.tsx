@@ -11,15 +11,16 @@ import {
   Dimensions,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { useNavigation, useRoute } from '@react-navigation/native'
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import Svg, { Path } from 'react-native-svg'
 import { usePhotos } from '../context/PhotoContext'
 import { useListings } from '../context/ListingsContext'
-import enhancementService from '../services/enhancementService'
+import enhancementService, { InsufficientCreditsError } from '../services/enhancementService'
 import hapticFeedback from '../utils/haptics'
 import { useErrorHandler } from '../hooks/useErrorHandler'
+import { RootStackParamList, isValidStyle } from '../types'
 
 const { width } = Dimensions.get('window')
 
@@ -80,12 +81,13 @@ export default function ProcessingScreen() {
   const { handleError } = useErrorHandler()
   const firstImage = selectedPhotos[0] || null
 
-  // Get parameters from previous screen
-  const params = route.params as any
-  const existingPropertyId = params?.propertyId || null // Get propertyId from navigation params
-  const style = params?.style || 'luster'
-  const photos = params?.photos || selectedPhotos
-  const photoCount = params?.photoCount || photos.length
+  // Get parameters from previous screen with proper typing
+  const params = route.params as RootStackParamList['Processing'] | undefined
+  const existingPropertyId = params?.propertyId ?? null
+  const rawStyle = params?.style
+  const style = isValidStyle(rawStyle) ? rawStyle : 'luster' // Validate style with type guard
+  const photos = params?.photos ?? selectedPhotos
+  const photoCount = params?.photoCount ?? photos.length
 
   // State for tracking progress
   const [processedCount, setProcessedCount] = useState(0)
@@ -317,6 +319,38 @@ export default function ProcessingScreen() {
             }
           } catch (error: any) {
             console.error(`Photo ${i + 1} enhancement error:`, error)
+
+            // Handle insufficient credits specifically
+            if (error instanceof InsufficientCreditsError) {
+              hapticFeedback.notification('error')
+              // Remove the failed listing
+              if (currentPropertyId) {
+                updateListing(currentPropertyId, {
+                  status: 'failed',
+                  error: 'Insufficient credits',
+                })
+              }
+              Alert.alert(
+                'Insufficient Credits',
+                'You need more credits to enhance photos. Would you like to purchase more?',
+                [
+                  {
+                    text: 'Not Now',
+                    style: 'cancel',
+                    onPress: () => navigation.navigate('Main' as never),
+                  },
+                  {
+                    text: 'Buy Credits',
+                    onPress: () => {
+                      // Navigate directly to Credits screen
+                      navigation.navigate('Credits' as never)
+                    },
+                  },
+                ]
+              )
+              return // Exit early
+            }
+
             // Mark property as failed and show error
             if (currentPropertyId) {
               updateListing(currentPropertyId, {

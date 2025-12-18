@@ -2,6 +2,7 @@ import React from 'react'
 import { NavigationContainer } from '@react-navigation/native'
 import { createStackNavigator } from '@react-navigation/stack'
 import { useAuth } from '../context/AuthContext'
+import type { RootStackParamList } from '../types'
 import WelcomeScreen from '../screens/WelcomeScreen'
 import AuthScreen from '../screens/AuthScreen'
 import LoginScreen from '../screens/LoginScreen'
@@ -17,22 +18,8 @@ import PrivacySecurityScreen from '../screens/PrivacySecurityScreen'
 import AccountSettingsScreen from '../screens/AccountSettingsScreen'
 import MainTabs from './MainTabs'
 
-export type RootStackParamList = {
-  Welcome: undefined
-  Auth: undefined
-  Login: undefined
-  Main: undefined
-  NewListing: undefined
-  StyleSelection: undefined
-  Confirmation: { style: string; photoCount: number }
-  Processing: undefined
-  Result: undefined
-  Project: { property?: any }
-  Credits: undefined
-  AllProperties: undefined
-  PrivacySecurity: undefined
-  AccountSettings: undefined
-}
+// Re-export from shared types for backwards compatibility
+export { type RootStackParamList } from '../types'
 
 const Stack = createStackNavigator<RootStackParamList>()
 

@@ -23,6 +23,7 @@ import * as Sharing from 'expo-sharing'
 import { usePhotos } from '../context/PhotoContext'
 import { useListings } from '../context/ListingsContext'
 import hapticFeedback from '../utils/haptics'
+import type { RootStackParamList } from '../types'
 
 const { width, height } = Dimensions.get('window')
 
@@ -105,10 +106,10 @@ export default function ResultScreen() {
   const blobAnim = useRef(new Animated.Value(0)).current
 
   // Get enhanced photos from navigation params or context
-  const params = route.params as any
-  const propertyId = params?.propertyId || null
-  const enhancedFromNav = params?.enhancedPhotos || enhancedPhotos || []
-  const originalFromNav = params?.originalPhotos || selectedPhotos || []
+  const params = route.params as RootStackParamList['Result'] | undefined
+  const propertyId = params?.propertyId ?? null
+  const enhancedFromNav = params?.enhancedPhotos ?? enhancedPhotos ?? []
+  const originalFromNav = params?.originalPhotos ?? selectedPhotos ?? []
 
   // Create enhanced images from selected photos
   const [images] = useState<EnhancedImage[]>(

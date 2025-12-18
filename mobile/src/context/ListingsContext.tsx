@@ -1,26 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import listingsService from '../services/listingsService'
+import { useAuth } from './AuthContext'
+import type { PropertyListing, PropertyStatus } from '../types'
+
+// Re-export types for backwards compatibility
+export type { PropertyListing, PropertyStatus } from '../types'
 
 const STORAGE_KEY = '@luster_listings'
-
-export type PropertyStatus = 'processing' | 'ready' | 'completed' | 'failed'
-
-export interface PropertyListing {
-  id: string
-  backendShootId?: string // Backend shoot UUID for syncing
-  address: string
-  price: string
-  beds: number
-  baths: number
-  image: any // Cover image (can be require() or { uri: string })
-  images?: any[] // All enhanced images for this listing
-  originalImages?: any[] // Original images before enhancement
-  isEnhanced?: boolean
-  status: PropertyStatus // 'processing' | 'ready' | 'completed' | 'failed'
-  error?: string // Error message if status is 'failed'
-  createdAt: Date
-}
 
 interface ListingsContextType {
   listings: PropertyListing[]
@@ -31,6 +18,7 @@ interface ListingsContextType {
   clearListings: () => Promise<void>
   syncFromBackend: () => Promise<void>
   isLoading: boolean
+  isSyncing: boolean
   isProcessing: (id: string) => boolean
   markAsProcessing: (id: string) => void
 }
@@ -40,13 +28,43 @@ const ListingsContext = createContext<ListingsContextType | undefined>(undefined
 export function ListingsProvider({ children }: { children: ReactNode }) {
   const [listings, setListings] = useState<PropertyListing[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isSyncing, setIsSyncing] = useState(false)
   // Global processing tracker (survives component re-mounts during hot reload)
   const processingPropertiesRef = React.useRef<Set<string>>(new Set())
+  // Sync lock to prevent concurrent syncs (race condition fix)
+  const syncInProgressRef = React.useRef(false)
 
-  // Load listings from storage on mount
+  // Get current user to detect account switches
+  const { user, synced } = useAuth()
+
+  // Track the current user ID to detect changes
+  const currentUserIdRef = React.useRef<string | null>(null)
+
+  // Reset listings when user changes (account switch)
   useEffect(() => {
-    loadListings()
-  }, [])
+    const newUserId = user?.id || null
+
+    if (currentUserIdRef.current !== null && currentUserIdRef.current !== newUserId) {
+      // User changed - clear local state immediately
+      console.log('🔄 User changed, clearing local listings cache')
+      setListings([])
+      processingPropertiesRef.current.clear()
+      setIsLoading(true)
+    }
+
+    currentUserIdRef.current = newUserId
+  }, [user?.id])
+
+  // Load listings from storage on mount or when user changes
+  useEffect(() => {
+    if (user) {
+      loadListings()
+    } else {
+      // No user - clear listings
+      setListings([])
+      setIsLoading(false)
+    }
+  }, [user?.id])
 
   // Save listings to storage whenever they change (debounced)
   useEffect(() => {
@@ -133,17 +151,37 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
 
   const clearListings = async () => {
     // Delete all listings from backend first
-    const deletePromises = listings
-      .filter(l => l.backendShootId)
-      .map(l => listingsService.deleteProject(l.backendShootId!))
+    const listingsToDelete = listings.filter(l => l.backendShootId)
 
-    await Promise.all(deletePromises)
-    console.log(`🗑️ Cleared ${listings.length} listings from backend`)
+    if (listingsToDelete.length > 0) {
+      const results = await Promise.allSettled(
+        listingsToDelete.map(l => listingsService.deleteProject(l.backendShootId!))
+      )
 
+      const succeeded = results.filter(r => r.status === 'fulfilled').length
+      const failed = results.filter(r => r.status === 'rejected').length
+
+      if (failed > 0) {
+        console.warn(`⚠️ Deleted ${succeeded}/${listingsToDelete.length} listings (${failed} failed)`)
+      } else {
+        console.log(`🗑️ Cleared ${succeeded} listings from backend`)
+      }
+    }
+
+    // Always clear local state regardless of backend failures
     setListings([])
   }
 
-  const syncFromBackend = async () => {
+  const syncFromBackend = useCallback(async (replaceAll: boolean = false) => {
+    // Prevent concurrent syncs (race condition)
+    if (syncInProgressRef.current) {
+      console.log('⏳ Sync already in progress, skipping...')
+      return
+    }
+
+    syncInProgressRef.current = true
+    setIsSyncing(true)
+
     try {
       console.log('🔄 Syncing listings from backend...')
       const backendListings = await listingsService.fetchListings()
@@ -151,52 +189,78 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
       if (backendListings.length > 0) {
         console.log(`✅ Synced ${backendListings.length} listings from backend`)
 
-        // Merge strategy: keep local listings, add new from backend, update existing
-        setListings(prev => {
-          // Get set of backend shoot IDs we already have locally
-          const existingBackendIds = new Set(
-            prev.map(l => l.backendShootId).filter(Boolean)
-          )
-
-          // Find new listings from backend that we don't have locally
-          const newFromBackend = backendListings.filter(
-            backend => !existingBackendIds.has(backend.id)
-          ).map(backend => ({
+        if (replaceAll) {
+          // Replace all local data with backend data (used after account switch)
+          const formattedListings = backendListings.map(backend => ({
             ...backend,
-            backendShootId: backend.id, // Map backend id to backendShootId
+            id: backend.id, // Use backend ID as local ID
+            backendShootId: backend.id,
+            createdAt: new Date(backend.createdAt),
           }))
+          setListings(formattedListings)
+          console.log(`📊 Replaced all listings with ${formattedListings.length} from backend`)
+        } else {
+          // Merge strategy: keep local listings, add new from backend, update existing
+          setListings(prev => {
+            // Get set of backend shoot IDs we already have locally
+            const existingBackendIds = new Set(
+              prev.map(l => l.backendShootId).filter(Boolean)
+            )
 
-          // Update existing local listings with backend data (images, status)
-          const updatedLocal = prev.map(local => {
-            if (local.backendShootId) {
-              const backend = backendListings.find(b => b.id === local.backendShootId)
-              if (backend) {
-                // Update with backend data but keep local id
-                return {
-                  ...local,
-                  address: backend.address || local.address,
-                  images: backend.images || local.images,
-                  image: backend.image || local.image,
-                  status: backend.status === 'completed' ? 'completed' : local.status,
-                  isEnhanced: backend.isEnhanced ?? local.isEnhanced,
+            // Find new listings from backend that we don't have locally
+            const newFromBackend = backendListings.filter(
+              backend => !existingBackendIds.has(backend.id)
+            ).map(backend => ({
+              ...backend,
+              backendShootId: backend.id, // Map backend id to backendShootId
+            }))
+
+            // Update existing local listings with backend data (images, status)
+            const updatedLocal = prev.map(local => {
+              if (local.backendShootId) {
+                const backend = backendListings.find(b => b.id === local.backendShootId)
+                if (backend) {
+                  // Update with backend data but keep local id
+                  return {
+                    ...local,
+                    address: backend.address || local.address,
+                    images: backend.images || local.images,
+                    image: backend.image || local.image,
+                    status: backend.status === 'completed' ? 'completed' : local.status,
+                    isEnhanced: backend.isEnhanced ?? local.isEnhanced,
+                  }
                 }
               }
-            }
-            return local
-          })
+              return local
+            })
 
-          // Combine: updated local + new from backend
-          const merged = [...updatedLocal, ...newFromBackend]
-          console.log(`📊 Merged: ${updatedLocal.length} local + ${newFromBackend.length} new = ${merged.length} total`)
-          return merged
-        })
+            // Combine: updated local + new from backend
+            const merged = [...updatedLocal, ...newFromBackend]
+            console.log(`📊 Merged: ${updatedLocal.length} local + ${newFromBackend.length} new = ${merged.length} total`)
+            return merged
+          })
+        }
       } else {
         console.log('No listings found on backend')
+        if (replaceAll) {
+          setListings([])
+        }
       }
     } catch (error) {
       console.error('Failed to sync listings from backend:', error)
+    } finally {
+      syncInProgressRef.current = false
+      setIsSyncing(false)
     }
-  }
+  }, [])
+
+  // Auto-sync from backend when user is authenticated and synced
+  useEffect(() => {
+    if (user && synced) {
+      // Replace all when syncing for a new session
+      syncFromBackend(true)
+    }
+  }, [user?.id, synced, syncFromBackend])
 
   const isProcessing = (id: string): boolean => {
     return processingPropertiesRef.current.has(id)
@@ -218,6 +282,7 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
         clearListings,
         syncFromBackend,
         isLoading,
+        isSyncing,
         isProcessing,
         markAsProcessing
       }}

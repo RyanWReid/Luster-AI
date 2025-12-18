@@ -4,6 +4,14 @@ import { api } from '../lib/api'
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
 
+// Custom error for insufficient credits
+export class InsufficientCreditsError extends Error {
+  constructor(message: string = 'Insufficient credits') {
+    super(message)
+    this.name = 'InsufficientCreditsError'
+  }
+}
+
 /**
  * Get auth token for API requests
  */
@@ -224,14 +232,26 @@ class EnhancementService {
           console.log('✅ FormData method successful:', data)
           return data
         }
-        
+
         const errorText = await response.text()
         console.log('❌ FormData method failed:', {
           status: response.status,
           error: errorText,
         })
+
+        // Check for insufficient credits - don't fallback, throw immediately
+        if (response.status === 402) {
+          console.log('💰 Insufficient credits detected')
+          throw new InsufficientCreditsError('You need more credits to enhance photos')
+        }
+
         console.log('Falling back to base64 method...')
       } catch (formError: unknown) {
+        // Re-throw InsufficientCreditsError - don't fallback to base64
+        if (formError instanceof InsufficientCreditsError) {
+          throw formError
+        }
+
         const err = formError instanceof Error ? formError : new Error(String(formError))
         console.error('❌ FormData method exception:', {
           name: err.name,
@@ -293,7 +313,13 @@ class EnhancementService {
           statusText: response.statusText,
           errorBody: errorText,
         })
-        
+
+        // Check for insufficient credits
+        if (response.status === 402) {
+          console.log('💰 Insufficient credits detected')
+          throw new InsufficientCreditsError('You need more credits to enhance photos')
+        }
+
         try {
           const errorData = JSON.parse(errorText)
           console.error('Parsed error:', errorData)
@@ -397,19 +423,37 @@ class EnhancementService {
     const enhancedUrls: string[] = []
     const total = imageUrls.length
 
-    // Start all jobs in parallel
-    const jobPromises = imageUrls.map(url => 
-      this.enhanceImage({ imageUrl: url, style })
+    // Start all jobs in parallel (use allSettled so one failure doesn't stop all)
+    const jobResults = await Promise.allSettled(
+      imageUrls.map(url => this.enhanceImage({ imageUrl: url, style }))
     )
 
-    const jobs = await Promise.all(jobPromises)
-    const jobIds = jobs.map(job => job.job_id)
+    // Extract successful job IDs, track failed indices
+    const jobIds: (string | null)[] = jobResults.map((result, index) => {
+      if (result.status === 'fulfilled') {
+        return result.value.job_id
+      } else {
+        console.error(`Failed to create job for image ${index}:`, result.reason)
+        return null
+      }
+    })
 
     // Poll all jobs for completion
     for (let i = 0; i < jobIds.length; i++) {
+      const jobId = jobIds[i]
+
+      // Skip jobs that failed to create
+      if (jobId === null) {
+        enhancedUrls.push('') // Push empty string for failed jobs
+        if (onProgress) {
+          onProgress(i + 1, total, 'failed')
+        }
+        continue
+      }
+
       try {
         const result = await this.pollJobStatus(
-          jobIds[i],
+          jobId,
           (status) => {
             if (onProgress) {
               onProgress(i, total, status)
@@ -419,13 +463,13 @@ class EnhancementService {
 
         if (result.status === 'succeeded' && result.enhanced_image_url) {
           // Convert relative URL to absolute URL
-          const fullUrl = result.enhanced_image_url.startsWith('http') 
-            ? result.enhanced_image_url 
+          const fullUrl = result.enhanced_image_url.startsWith('http')
+            ? result.enhanced_image_url
             : `${API_BASE_URL}${result.enhanced_image_url}`
-          console.log(`Enhanced image URL for job ${jobIds[i]}: ${fullUrl}`)
+          console.log(`Enhanced image URL for job ${jobId}: ${fullUrl}`)
           enhancedUrls.push(fullUrl)
         } else {
-          console.error(`Job ${jobIds[i]} failed:`, result.error)
+          console.error(`Job ${jobId} failed:`, result.error)
           enhancedUrls.push('') // Push empty string for failed jobs
         }
 
