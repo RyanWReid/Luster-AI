@@ -910,6 +910,8 @@ async def mobile_enhance(
     request: Request,
     image: UploadFile = File(...),
     style: str = Form("luster"),
+    shoot_id: Optional[str] = Form(None),
+    project_name: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -920,19 +922,43 @@ async def mobile_enhance(
     print(f"File: {image.filename}")
     print(f"Content type: {image.content_type}")
     print(f"User: {user.id}")
+    print(f"Shoot ID: {shoot_id}")
+    print(f"Project name: {project_name}")
 
-    mobile_shoot = (
-        db.query(Shoot)
-        .filter(Shoot.user_id == user.id, Shoot.name == "Mobile Uploads")
-        .first()
-    )
+    # Handle shoot: use existing, or create new unique project
+    mobile_shoot = None
 
-    if not mobile_shoot:
-        mobile_shoot = Shoot(
-            id=str(uuid.uuid4()), user_id=user.id, name="Mobile Uploads"
+    if shoot_id:
+        # Adding to existing project
+        mobile_shoot = (
+            db.query(Shoot)
+            .filter(Shoot.id == shoot_id, Shoot.user_id == user.id)
+            .first()
         )
+        if not mobile_shoot:
+            raise HTTPException(status_code=404, detail="Project not found")
+        print(f"Adding to existing project: {mobile_shoot.name} ({mobile_shoot.id})")
+    else:
+        # Create new unique project (NOT shared "Mobile Uploads")
+        name = project_name
+        if not name:
+            # Auto-generate name: "Project Dec 11"
+            name = f"Project {datetime.now().strftime('%b %d')}"
+
+        # Check for duplicate names and add suffix if needed
+        existing_count = (
+            db.query(Shoot)
+            .filter(Shoot.user_id == user.id, Shoot.name.like(f"{name}%"))
+            .count()
+        )
+
+        if existing_count > 0:
+            name = f"{name} ({existing_count + 1})"
+
+        mobile_shoot = Shoot(id=str(uuid.uuid4()), user_id=user.id, name=name)
         db.add(mobile_shoot)
         db.flush()
+        print(f"Created new project: {mobile_shoot.name} ({mobile_shoot.id})")
 
     # Save uploaded file
     file_content = await image.read()
@@ -1009,12 +1035,25 @@ async def mobile_enhance(
     db.add(asset)
     db.flush()
 
-    # Check or create credits
-    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
+    # Check or create credits with row-level lock to prevent race conditions
+    # Using FOR UPDATE ensures atomic read-check-modify operation
+    credit = (
+        db.query(Credit)
+        .filter(Credit.user_id == user.id)
+        .with_for_update()  # Lock the row to prevent concurrent modifications
+        .first()
+    )
     if not credit:
         credit = Credit(user_id=user.id, balance=0)
         db.add(credit)
         db.flush()
+        # Re-query with lock after creation
+        credit = (
+            db.query(Credit)
+            .filter(Credit.user_id == user.id)
+            .with_for_update()
+            .first()
+        )
 
     if credit.balance < 1:
         raise HTTPException(status_code=402, detail="Insufficient credits")
@@ -1052,6 +1091,7 @@ async def mobile_enhance(
 
     return {
         "job_id": str(job.id),
+        "shoot_id": str(mobile_shoot.id),  # Include shoot_id for batch grouping
         "status": "queued",
         "message": "Enhancement job created successfully",
     }
@@ -1166,12 +1206,25 @@ async def mobile_enhance_base64(
     db.add(asset)
     db.flush()
 
-    # Check or create credits
-    credit = db.query(Credit).filter(Credit.user_id == user.id).first()
+    # Check or create credits with row-level lock to prevent race conditions
+    # Using FOR UPDATE ensures atomic read-check-modify operation
+    credit = (
+        db.query(Credit)
+        .filter(Credit.user_id == user.id)
+        .with_for_update()  # Lock the row to prevent concurrent modifications
+        .first()
+    )
     if not credit:
         credit = Credit(user_id=user.id, balance=0)
         db.add(credit)
         db.flush()
+        # Re-query with lock after creation
+        credit = (
+            db.query(Credit)
+            .filter(Credit.user_id == user.id)
+            .with_for_update()
+            .first()
+        )
 
     if credit.balance < 1:
         raise HTTPException(status_code=402, detail="Insufficient credits")

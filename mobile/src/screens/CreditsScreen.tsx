@@ -21,6 +21,7 @@ import { useNavigation } from '@react-navigation/native'
 import { PurchasesPackage } from 'react-native-purchases'
 import hapticFeedback from '../utils/haptics'
 import { useRevenueCat } from '../hooks/useRevenueCat'
+import { useAuth } from '../context/AuthContext'
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window')
 
@@ -178,8 +179,14 @@ export default function CreditsScreen() {
   const [currentPage, setCurrentPage] = useState<number>(0)
   const flatListRef = useRef<FlatList>(null)
 
-  // RevenueCat integration
-  const { offerings, loading, hasActiveSubscription, purchasePackage, restorePurchases } = useRevenueCat()
+  // Get auth context for credit refresh after purchase
+  const { user, refreshCredits } = useAuth()
+
+  // RevenueCat integration - pass refreshCredits callback to update UI after purchase
+  const { offerings, loading, hasActiveSubscription, purchasePackage, restorePurchases } = useRevenueCat({
+    userId: user?.id,
+    onCreditsUpdated: refreshCredits,
+  })
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(0)).current

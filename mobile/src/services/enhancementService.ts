@@ -196,7 +196,16 @@ class EnhancementService {
 
         formData.append('image', file as any)
         formData.append('style', params.style)
-        console.log('FormData prepared with image and style')
+        // Pass shoot_id to group photos in same project
+        if (params.shootId) {
+          formData.append('shoot_id', params.shootId)
+          console.log('Adding to existing project:', params.shootId)
+        }
+        // Pass project_name for new projects
+        if (params.projectName) {
+          formData.append('project_name', params.projectName)
+        }
+        console.log('FormData prepared with image, style, and project info')
 
         console.log('Sending FormData request to:', `${API_BASE_URL}/api/mobile/enhance`)
         const startTime = Date.now()

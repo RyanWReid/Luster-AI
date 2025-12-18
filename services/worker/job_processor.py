@@ -145,10 +145,22 @@ def process_image_enhancement(job_id: str):
             job.completed_at = datetime.utcnow()
 
             # Refund credits on failure (credits were reserved at job creation)
-            credit = db.query(Credit).filter(Credit.user_id == job.user_id).first()
-            if credit:
-                credit.balance += job.credits_used
-                print(f"Refunded {job.credits_used} credits to user {job.user_id}")
+            # Check for existing refund to prevent double-refund
+            existing_refund = (
+                db.query(JobEvent)
+                .filter(
+                    JobEvent.job_id == job.id,
+                    JobEvent.event_type == "credits_refunded"
+                )
+                .first()
+            )
+            if existing_refund:
+                print(f"⚠️  Credits already refunded for job {job.id}, skipping refund")
+            else:
+                credit = db.query(Credit).filter(Credit.user_id == job.user_id).first()
+                if credit:
+                    credit.balance += job.credits_used
+                    print(f"Refunded {job.credits_used} credits to user {job.user_id}")
 
             db.commit()
 

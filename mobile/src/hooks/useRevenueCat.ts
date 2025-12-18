@@ -10,6 +10,11 @@ import { Alert } from 'react-native'
 import revenueCatService from '../services/revenueCatService'
 import hapticFeedback from '../utils/haptics'
 
+export interface UseRevenueCatOptions {
+  userId?: string
+  onCreditsUpdated?: () => Promise<void>
+}
+
 export interface UseRevenueCatResult {
   // State
   offerings: PurchasesOffering | null
@@ -22,7 +27,8 @@ export interface UseRevenueCatResult {
   refresh: () => Promise<void>
 }
 
-export function useRevenueCat(userId?: string): UseRevenueCatResult {
+export function useRevenueCat(options: UseRevenueCatOptions = {}): UseRevenueCatResult {
+  const { userId, onCreditsUpdated } = options
   const [offerings, setOfferings] = useState<PurchasesOffering | null>(null)
   const [loading, setLoading] = useState(true)
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false)
@@ -72,6 +78,17 @@ export function useRevenueCat(userId?: string): UseRevenueCatResult {
         // Refresh subscription status
         const hasActive = await revenueCatService.hasActiveSubscription()
         setHasActiveSubscription(hasActive)
+
+        // CRITICAL: Refresh credits from backend after successful purchase
+        // RevenueCat webhook will have added credits, so we need to fetch the new balance
+        if (onCreditsUpdated) {
+          try {
+            await onCreditsUpdated()
+            console.log('💰 Credits refreshed after purchase')
+          } catch (error) {
+            console.error('Failed to refresh credits after purchase:', error)
+          }
+        }
 
         Alert.alert(
           'Success!',

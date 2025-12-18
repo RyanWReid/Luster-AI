@@ -16,8 +16,10 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import Svg, { Path } from 'react-native-svg'
 import { usePhotos } from '../context/PhotoContext'
+import { useAuth } from '../context/AuthContext'
 import { useListings } from '../context/ListingsContext'
 import enhancementService, { InsufficientCreditsError } from '../services/enhancementService'
+import creditService from '../services/creditService'
 import hapticFeedback from '../utils/haptics'
 import { useErrorHandler } from '../hooks/useErrorHandler'
 import { RootStackParamList, isValidStyle } from '../types'
@@ -77,6 +79,7 @@ export default function ProcessingScreen() {
   const navigation = useNavigation()
   const route = useRoute()
   const { selectedPhotos, setEnhancedPhotos } = usePhotos()
+  const { refreshCredits } = useAuth()
   const { addListing, updateListing, listings, isProcessing, markAsProcessing } = useListings()
   const { handleError } = useErrorHandler()
   const firstImage = selectedPhotos[0] || null
@@ -202,9 +205,12 @@ export default function ProcessingScreen() {
       if (!isMounted) return
       try {
         // Only create property if we don't have an existing one
+        // NOTE: This fallback should rarely trigger - ConfirmationScreen creates the property
         let currentPropertyId = existingPropertyId
         if (!currentPropertyId && photos.length > 0 && photos[0]) {
           // Fallback: create property if one wasn't created in ConfirmationScreen
+          // This is a safety net, not the normal flow
+          console.warn('⚠️ ProcessingScreen: No propertyId from ConfirmationScreen - creating fallback')
           currentPropertyId = addListing({
             address: 'New Project',
             price: '$---,---',
@@ -218,8 +224,10 @@ export default function ProcessingScreen() {
           })
           setPropertyId(currentPropertyId)
           console.log('ProcessingScreen: Created fallback property card:', currentPropertyId)
+        } else if (currentPropertyId) {
+          console.log('✅ ProcessingScreen: Using property ID from ConfirmationScreen:', currentPropertyId)
         } else {
-          console.log('ProcessingScreen: Using existing property ID:', currentPropertyId)
+          console.error('❌ ProcessingScreen: No propertyId and no photos - this is unexpected')
         }
 
         // Check if this property is already done processing
@@ -252,6 +260,38 @@ export default function ProcessingScreen() {
 
         setCurrentStatus('Preparing your photos...')
         await new Promise((resolve) => setTimeout(resolve, 1000))
+
+        // PRE-CHECK: Verify user has enough credits for ALL photos before starting
+        // This prevents partial batch failures and provides better UX
+        setCurrentStatus('Checking credits...')
+        try {
+          const currentBalance = await creditService.getCreditBalance()
+          const requiredCredits = photos.length
+
+          if (currentBalance < requiredCredits) {
+            hapticFeedback.notification('warning')
+            Alert.alert(
+              'Not Enough Credits',
+              `You need ${requiredCredits} credits to enhance ${photos.length} photo${photos.length > 1 ? 's' : ''}, but you only have ${currentBalance}.\n\nWould you like to purchase more credits?`,
+              [
+                {
+                  text: 'Not Now',
+                  style: 'cancel',
+                  onPress: () => navigation.navigate('Main' as never),
+                },
+                {
+                  text: 'Buy Credits',
+                  onPress: () => navigation.navigate('Credits' as never),
+                },
+              ]
+            )
+            return // Exit early - don't start processing
+          }
+          console.log(`✅ Credit pre-check passed: ${currentBalance} available, ${requiredCredits} required`)
+        } catch (error) {
+          console.error('Failed to check credits:', error)
+          // Continue anyway - backend will reject if insufficient
+        }
 
         const results: string[] = []
         let shootId: string | null = null  // Track backend shoot ID for all photos in batch
@@ -381,6 +421,15 @@ export default function ProcessingScreen() {
             images: results.map((uri: string) => ({ uri })),
           })
           console.log('Updated property to ready status:', currentPropertyId)
+        }
+
+        // CRITICAL: Refresh credits after enhancement completes
+        // Credits were deducted during processing, UI needs to reflect new balance
+        try {
+          await refreshCredits()
+          console.log('💰 Credits refreshed after enhancement')
+        } catch (error) {
+          console.error('Failed to refresh credits after enhancement:', error)
         }
 
         // Don't auto-navigate - just go back to dashboard

@@ -21,7 +21,7 @@ import Svg, { Path } from 'react-native-svg'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import { usePhotos } from '../context/PhotoContext'
-import { useListings } from '../context/ListingsContext'
+import { useListings } from '../context/ListingsContext'  // updateListing only - no addListing to prevent duplicates
 import hapticFeedback from '../utils/haptics'
 import type { RootStackParamList } from '../types'
 
@@ -93,7 +93,7 @@ export default function ResultScreen() {
   const navigation = useNavigation()
   const route = useRoute()
   const { selectedPhotos, enhancedPhotos } = usePhotos()
-  const { addListing, updateListing } = useListings()
+  const { updateListing } = useListings()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showingOriginal, setShowingOriginal] = useState(false)
 
@@ -256,20 +256,10 @@ export default function ResultScreen() {
         })
         console.log('Updated property to completed status:', propertyId)
       } else {
-        // Fallback: Create new listing if no propertyId (shouldn't happen normally)
-        const newListing = {
-          address: `${allEnhancedImages.length} Photos Enhanced`,
-          price: '$---,---',
-          beds: 0,
-          baths: 0,
-          image: allEnhancedImages[0] || images[0].enhanced,
-          images: allEnhancedImages,
-          originalImages: allOriginalImages,
-          isEnhanced: true,
-          status: 'completed' as const,
-        }
-        addListing(newListing)
-        console.log('Created new listing (fallback)')
+        // No propertyId - this shouldn't happen in normal flow
+        // ConfirmationScreen creates the property, ProcessingScreen passes it through
+        // Do NOT create a new listing here as it causes duplicate cards
+        console.warn('ResultScreen: No propertyId provided - skipping listing creation to avoid duplicates')
       }
 
       hapticFeedback.notification('success')

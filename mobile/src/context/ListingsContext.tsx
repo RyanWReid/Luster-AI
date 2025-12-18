@@ -207,10 +207,32 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
               prev.map(l => l.backendShootId).filter(Boolean)
             )
 
+            // Also track local IDs to prevent duplicates during race conditions
+            // (when backendShootId hasn't been set yet but listing exists)
+            const existingLocalIds = new Set(prev.map(l => l.id))
+
             // Find new listings from backend that we don't have locally
-            const newFromBackend = backendListings.filter(
-              backend => !existingBackendIds.has(backend.id)
-            ).map(backend => ({
+            // Check both backendShootId AND local id to prevent race condition duplicates
+            const newFromBackend = backendListings.filter(backend => {
+              // Skip if we already have this backend ID
+              if (existingBackendIds.has(backend.id)) return false
+              // Skip if backend.id matches a local ID (listing was just created)
+              if (existingLocalIds.has(backend.id)) return false
+              // Skip if there's a local listing with matching status that was just created
+              // (within last 60 seconds) - this catches race conditions
+              const recentLocal = prev.find(l =>
+                !l.backendShootId &&
+                l.status === 'processing' &&
+                l.createdAt &&
+                (Date.now() - new Date(l.createdAt).getTime()) < 60000
+              )
+              if (recentLocal) {
+                console.log('⏳ Skipping backend listing - recent local listing exists:', recentLocal.id)
+                // Link this backend listing to the recent local one
+                return false
+              }
+              return true
+            }).map(backend => ({
               ...backend,
               backendShootId: backend.id, // Map backend id to backendShootId
             }))
@@ -228,6 +250,30 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
                     image: backend.image || local.image,
                     status: backend.status === 'completed' ? 'completed' : local.status,
                     isEnhanced: backend.isEnhanced ?? local.isEnhanced,
+                  }
+                }
+              }
+              // Handle race condition: local listing without backendShootId
+              // that was recently created - try to match with backend listing
+              if (!local.backendShootId && local.status === 'processing' && local.createdAt) {
+                const localAge = Date.now() - new Date(local.createdAt).getTime()
+                if (localAge < 120000) { // Within 2 minutes
+                  // Find a backend listing that doesn't match any existing backendShootId
+                  const unmatchedBackend = backendListings.find(b =>
+                    !existingBackendIds.has(b.id) &&
+                    (b.status === 'completed' || b.status === 'ready')
+                  )
+                  if (unmatchedBackend) {
+                    console.log(`🔗 Linking recent local listing ${local.id} to backend ${unmatchedBackend.id}`)
+                    return {
+                      ...local,
+                      backendShootId: unmatchedBackend.id,
+                      address: unmatchedBackend.address || local.address,
+                      images: unmatchedBackend.images || local.images,
+                      image: unmatchedBackend.image || local.image,
+                      status: unmatchedBackend.status === 'completed' ? 'completed' : local.status,
+                      isEnhanced: unmatchedBackend.isEnhanced ?? local.isEnhanced,
+                    }
                   }
                 }
               }
