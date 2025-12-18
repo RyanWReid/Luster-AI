@@ -174,9 +174,23 @@ export async function withRetry<T>(
 
 /**
  * Get the current auth token from Supabase session
+ * Exported for use by services that need direct token access
  */
-async function getAuthToken(): Promise<string | null> {
+export async function getAuthToken(): Promise<string | null> {
   const { data: { session } } = await supabase.auth.getSession()
+
+  if (session?.access_token) {
+    // Decode JWT payload to log user ID (for debugging)
+    try {
+      const payload = JSON.parse(atob(session.access_token.split('.')[1]))
+      console.log(`🔑 API Request - User ID: ${payload.sub}, Email: ${payload.email}`)
+    } catch (e) {
+      console.log('🔑 API Request - Token present but could not decode')
+    }
+  } else {
+    console.log('🔑 API Request - No auth token')
+  }
+
   return session?.access_token || null
 }
 

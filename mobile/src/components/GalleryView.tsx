@@ -53,33 +53,36 @@ export default function GalleryView({ propertyData }: GalleryViewProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   
   // Use actual images from the property listing or fall back to mock
+  // IDs must be stable (no Math.random) to prevent React list key issues
   const galleryImages = useMemo<GalleryImage[]>(() => {
     const propertyImages = propertyData?.images || []
     const hasRealImages = propertyImages.length > 0
-    
+    const propertyId = propertyData?.id || 'default'
+
     if (hasRealImages) {
       const heights = [180, 220, 160, 240, 200, 180, 220, 160]
-      
+
       return propertyImages.map((image: any, index: number) => ({
-        id: `real-${index}-${Math.random().toString(36).substring(2, 11)}`,
+        // Stable ID based on property and index (not random)
+        id: `${propertyId}-real-${index}`,
         uri: image,
         height: heights[index % heights.length],
       }))
     }
-    
+
     // Mock images for demo
     const MOCK_IMAGE_1 = require('../../assets/photo.png')
     const MOCK_IMAGE_2 = require('../../assets/welcome.png')
-    
+
     const heights = [180, 220, 160, 240, 200, 180]
     const defaultImage = propertyData?.image || MOCK_IMAGE_1
-    
+
     return heights.map((height, i) => {
-      const uniqueId = `gallery-item-${i}-${Math.random().toString(36).substring(2, 11)}`
       const imageSource = i % 2 === 0 ? defaultImage : MOCK_IMAGE_2
-      
+
       return {
-        id: uniqueId,
+        // Stable ID based on property and index (not random)
+        id: `${propertyId}-mock-${i}`,
         uri: imageSource,
         height: height,
       }

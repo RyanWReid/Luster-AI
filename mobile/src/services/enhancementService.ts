@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { supabase } from '../lib/supabase'
-import { api } from '../lib/api'
+import { api, getAuthToken } from '../lib/api'
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -10,14 +9,6 @@ export class InsufficientCreditsError extends Error {
     super(message)
     this.name = 'InsufficientCreditsError'
   }
-}
-
-/**
- * Get auth token for API requests
- */
-async function getAuthToken(): Promise<string | null> {
-  const { data: { session } } = await supabase.auth.getSession()
-  return session?.access_token || null
 }
 
 interface EnhanceImageParams {

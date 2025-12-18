@@ -6,6 +6,7 @@ import * as WebBrowser from 'expo-web-browser'
 import * as Linking from 'expo-linking'
 import * as AppleAuthentication from 'expo-apple-authentication'
 import * as Crypto from 'expo-crypto'
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import userService from '../services/userService'
 import creditService from '../services/creditService'
 
@@ -40,6 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const syncUserToBackend = async () => {
     try {
       const result = await userService.syncUser()
+      console.log(`💰 Credits synced - User: ${result.user_id}, Balance: ${result.credits.balance}`)
       setCredits(result.credits.balance)
       setSynced(true)
 
@@ -57,6 +59,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshCredits = async () => {
     try {
       const balance = await creditService.getCreditBalance()
+      console.log(`💰 Credits refreshed - Balance: ${balance}`)
       setCredits(balance)
       return balance
     } catch (error) {
@@ -76,11 +79,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth state changes
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log(`🔐 Auth Event: ${event}`)
+        if (session?.user) {
+          console.log(`🔐 User: ${session.user.id} (${session.user.email})`)
+        }
+
         setSession(session)
         setUser(session?.user ?? null)
 
         // Sync user to backend on sign in
         if (event === 'SIGNED_IN' && session) {
+          console.log(`🔐 SIGNED_IN - User ID: ${session.user.id}`)
           // Wait a moment for session to be fully established
           setTimeout(() => {
             syncUserToBackend()
@@ -89,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Reset state on sign out
         if (event === 'SIGNED_OUT') {
+          console.log('🔐 SIGNED_OUT - Clearing local state')
           setCredits(0)
           setSynced(false)
         }
@@ -149,6 +159,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signInWithGoogle = async () => {
     try {
+      // Clear any cached web browser session first
+      await WebBrowser.maybeCompleteAuthSession()
+
       const redirectUrl = Linking.createURL('/--/auth/callback')
 
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -156,15 +169,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: {
           redirectTo: redirectUrl,
           skipBrowserRedirect: true,
+          queryParams: {
+            prompt: 'select_account',  // Force account picker every time
+            access_type: 'offline',
+          },
         },
       })
       if (error) throw error
 
-      // Open OAuth URL in in-app browser
+      // Open OAuth URL in in-app browser with fresh session
       if (data?.url) {
         const result = await WebBrowser.openAuthSessionAsync(
           data.url,
-          redirectUrl
+          redirectUrl,
+          { preferEphemeralSession: true }  // Don't use cached cookies
         )
 
         if (result.type === 'success') {
@@ -190,8 +208,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Use native Apple Sign In on iOS
       if (Platform.OS === 'ios') {
-        // Generate a random nonce for security
-        const rawNonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15)
+        // Generate cryptographically secure nonce (required for OAuth security)
+        const randomBytes = await Crypto.getRandomBytesAsync(32)
+        const rawNonce = Array.from(randomBytes)
+          .map(byte => byte.toString(16).padStart(2, '0'))
+          .join('')
 
         // Hash the nonce with SHA-256 (required by Apple)
         const hashedNonce = await Crypto.digestStringAsync(
@@ -282,6 +303,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      // Clear user-specific local data before signing out
+      await AsyncStorage.removeItem('@luster_listings')
+      console.log('🧹 Cleared local listings cache')
+
       const { error } = await supabase.auth.signOut()
       if (error) throw error
       Alert.alert('Success', 'Signed out successfully!')

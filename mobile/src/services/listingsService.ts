@@ -1,15 +1,7 @@
-import { supabase } from '../lib/supabase'
+import { getAuthToken } from '../lib/api'
 import { PropertyListing } from '../context/ListingsContext'
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000'
-
-/**
- * Get auth token for API requests
- */
-async function getAuthToken(): Promise<string | null> {
-  const { data: { session } } = await supabase.auth.getSession()
-  return session?.access_token || null
-}
 
 interface ListingsResponse {
   listings: PropertyListing[]
