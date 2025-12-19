@@ -33,21 +33,25 @@ class R2Client:
             secret_access_key: R2 secret access key
             bucket_name: R2 bucket name
         """
-        self.account_id = account_id or os.getenv("R2_ACCOUNT_ID")
-        self.access_key_id = access_key_id or os.getenv("R2_ACCESS_KEY_ID")
-        self.secret_access_key = secret_access_key or os.getenv("R2_SECRET_ACCESS_KEY")
-        self.bucket_name = bucket_name or os.getenv("R2_BUCKET_NAME", "luster")
+        # Support both R2_* and S3_* env var naming conventions
+        self.access_key_id = access_key_id or os.getenv("S3_ACCESS_KEY_ID") or os.getenv("R2_ACCESS_KEY_ID")
+        self.secret_access_key = secret_access_key or os.getenv("S3_SECRET_ACCESS_KEY") or os.getenv("R2_SECRET_ACCESS_KEY")
+        self.bucket_name = bucket_name or os.getenv("S3_BUCKET") or os.getenv("R2_BUCKET_NAME", "luster")
+
+        # Get endpoint URL directly or construct from account ID
+        self.endpoint_url = os.getenv("S3_ENDPOINT")
+        if not self.endpoint_url:
+            self.account_id = account_id or os.getenv("R2_ACCOUNT_ID")
+            if self.account_id:
+                self.endpoint_url = f"https://{self.account_id}.r2.cloudflarestorage.com"
 
         # Validate required credentials
-        if not self.account_id:
-            raise ValueError("R2_ACCOUNT_ID is required")
+        if not self.endpoint_url:
+            raise ValueError("S3_ENDPOINT or R2_ACCOUNT_ID is required")
         if not self.access_key_id:
-            raise ValueError("R2_ACCESS_KEY_ID is required")
+            raise ValueError("S3_ACCESS_KEY_ID or R2_ACCESS_KEY_ID is required")
         if not self.secret_access_key:
-            raise ValueError("R2_SECRET_ACCESS_KEY is required")
-
-        # Construct R2 endpoint URL
-        self.endpoint_url = f"https://{self.account_id}.r2.cloudflarestorage.com"
+            raise ValueError("S3_SECRET_ACCESS_KEY or R2_SECRET_ACCESS_KEY is required")
 
         # Configure boto3 S3 client for R2
         self.s3_client = boto3.client(
