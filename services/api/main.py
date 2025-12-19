@@ -157,6 +157,7 @@ class Base64ImageRequest(BaseModel):
     style: str = "luster"
     project_name: Optional[str] = None
     shoot_id: Optional[str] = None
+    credit_cost: int = 1  # Credit cost per photo (flexible pricing)
 
     @field_validator("image")
     @classmethod
@@ -912,6 +913,7 @@ async def mobile_enhance(
     style: str = Form("luster"),
     shoot_id: Optional[str] = Form(None),
     project_name: Optional[str] = Form(None),
+    credit_cost: int = Form(1),  # Credit cost per photo (flexible pricing)
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -924,6 +926,7 @@ async def mobile_enhance(
     print(f"User: {user.id}")
     print(f"Shoot ID: {shoot_id}")
     print(f"Project name: {project_name}")
+    print(f"Credit cost: {credit_cost}")
 
     # Handle shoot: use existing, or create new unique project
     mobile_shoot = None
@@ -1055,11 +1058,11 @@ async def mobile_enhance(
             .first()
         )
 
-    if credit.balance < 1:
+    if credit.balance < credit_cost:
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
     # Deduct credits upfront (reservation) - will be refunded on failure
-    credit.balance -= 1
+    credit.balance -= credit_cost
     db.flush()
 
     # Create job with proper prompt
@@ -1073,7 +1076,7 @@ async def mobile_enhance(
         user_id=user.id,
         prompt=style_prompts.get(style, style_prompts["luster"]),
         status=JobStatus.queued,
-        credits_used=1,
+        credits_used=credit_cost,
     )
     db.add(job)
     db.flush()
@@ -1226,11 +1229,11 @@ async def mobile_enhance_base64(
             .first()
         )
 
-    if credit.balance < 1:
+    if credit.balance < body.credit_cost:
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
     # Deduct credits upfront (reservation) - will be refunded on failure
-    credit.balance -= 1
+    credit.balance -= body.credit_cost
     db.flush()
 
     # Create job
@@ -1244,7 +1247,7 @@ async def mobile_enhance_base64(
         user_id=user.id,
         prompt=style_prompts.get(body.style, style_prompts["luster"]),
         status=JobStatus.queued,
-        credits_used=1,
+        credits_used=body.credit_cost,
     )
     db.add(job)
     db.flush()
@@ -1254,7 +1257,7 @@ async def mobile_enhance_base64(
         job_id=job.id,
         event_type="created",
         details=json.dumps(
-            {"source": "mobile_base64", "style": body.style, "credits_reserved": 1}
+            {"source": "mobile_base64", "style": body.style, "credits_reserved": body.credit_cost}
         ),
     )
     db.add(event)

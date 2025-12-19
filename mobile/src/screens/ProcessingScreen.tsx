@@ -23,7 +23,6 @@ import creditService from '../services/creditService'
 import hapticFeedback from '../utils/haptics'
 import { useErrorHandler } from '../hooks/useErrorHandler'
 import { RootStackParamList, isValidStyle } from '../types'
-import InsufficientCreditsModal from '../components/InsufficientCreditsModal'
 
 const { width } = Dimensions.get('window')
 
@@ -92,6 +91,7 @@ export default function ProcessingScreen() {
   const style = isValidStyle(rawStyle) ? rawStyle : 'luster' // Validate style with type guard
   const photos = params?.photos ?? selectedPhotos
   const photoCount = params?.photoCount ?? photos.length
+  const creditPerPhoto = params?.creditPerPhoto ?? 1 // Default to 1 credit per photo
 
   // State for tracking progress
   const [processedCount, setProcessedCount] = useState(0)
@@ -99,10 +99,6 @@ export default function ProcessingScreen() {
   const [enhancedUrls, setEnhancedUrls] = useState<string[]>([])
   const [canDismiss, setCanDismiss] = useState(false)
   const [propertyId, setPropertyId] = useState<string | null>(existingPropertyId)
-
-  // State for insufficient credits modal
-  const [showCreditsModal, setShowCreditsModal] = useState(false)
-  const [creditsInfo, setCreditsInfo] = useState({ current: 0, required: 0 })
 
   // Use ref to track processing state (doesn't trigger re-renders)
   const hasStartedProcessing = useRef(false)
@@ -266,24 +262,7 @@ export default function ProcessingScreen() {
         setCurrentStatus('Preparing your photos...')
         await new Promise((resolve) => setTimeout(resolve, 1000))
 
-        // PRE-CHECK: Verify user has enough credits for ALL photos before starting
-        // This prevents partial batch failures and provides better UX
-        setCurrentStatus('Checking credits...')
-        try {
-          const currentBalance = await creditService.getCreditBalance()
-          const requiredCredits = photos.length
-
-          if (currentBalance < requiredCredits) {
-            hapticFeedback.notification('warning')
-            setCreditsInfo({ current: currentBalance, required: requiredCredits })
-            setShowCreditsModal(true)
-            return // Exit early - don't start processing
-          }
-          console.log(`✅ Credit pre-check passed: ${currentBalance} available, ${requiredCredits} required`)
-        } catch (error) {
-          console.error('Failed to check credits:', error)
-          // Continue anyway - backend will reject if insufficient
-        }
+        // Credit check is now done in ConfirmationScreen before navigating here
 
         const results: string[] = []
         let shootId: string | null = null  // Track backend shoot ID for all photos in batch
@@ -308,6 +287,7 @@ export default function ProcessingScreen() {
               style: style as 'luster' | 'flambient',
               projectName: i === 0 ? projectName : undefined,  // Only first photo sets name
               shootId: shootId || undefined,  // Use existing shoot for subsequent photos
+              creditCost: creditPerPhoto,  // Pass credit cost from confirmation screen
             })
 
             // Store shoot_id from first photo response
@@ -362,9 +342,21 @@ export default function ProcessingScreen() {
                   error: 'Insufficient credits',
                 })
               }
-              // Show the custom modal
-              setCreditsInfo({ current: 0, required: 1 })
-              setShowCreditsModal(true)
+              Alert.alert(
+                'Insufficient Credits',
+                'You need more credits to enhance photos. Would you like to purchase more?',
+                [
+                  {
+                    text: 'Not Now',
+                    style: 'cancel',
+                    onPress: () => navigation.navigate('Main' as never),
+                  },
+                  {
+                    text: 'Buy Credits',
+                    onPress: () => navigation.navigate('Credits' as never),
+                  },
+                ]
+              )
               return // Exit early
             }
 
@@ -457,16 +449,6 @@ export default function ProcessingScreen() {
     } else {
       navigation.goBack()
     }
-  }
-
-  const handleCreditsModalDismiss = () => {
-    setShowCreditsModal(false)
-    navigation.navigate('Main' as never)
-  }
-
-  const handleBuyCredits = () => {
-    setShowCreditsModal(false)
-    navigation.navigate('Credits' as never)
   }
 
   return (
@@ -623,15 +605,6 @@ export default function ProcessingScreen() {
           )}
         </Animated.View>
       </SafeAreaView>
-
-      {/* Insufficient Credits Modal */}
-      <InsufficientCreditsModal
-        visible={showCreditsModal}
-        currentCredits={creditsInfo.current}
-        requiredCredits={creditsInfo.required}
-        onDismiss={handleCreditsModalDismiss}
-        onBuyCredits={handleBuyCredits}
-      />
     </View>
   )
 }

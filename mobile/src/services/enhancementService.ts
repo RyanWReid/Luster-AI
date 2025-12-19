@@ -16,6 +16,7 @@ interface EnhanceImageParams {
   style: 'luster' | 'flambient'
   projectName?: string  // Name for new project (auto-generated if not provided)
   shootId?: string      // Existing shoot ID (to add photos to existing project)
+  creditCost?: number   // Credit cost per photo (default 1, for flexible pricing)
 }
 
 interface EnhanceResponse {
@@ -205,7 +206,10 @@ class EnhancementService {
         if (params.projectName) {
           formData.append('project_name', params.projectName)
         }
-        console.log('FormData prepared with image, style, and project info')
+        // Pass credit_cost for flexible pricing (default 1)
+        const creditCost = params.creditCost ?? 1
+        formData.append('credit_cost', creditCost.toString())
+        console.log('FormData prepared with image, style, project info, and credit_cost:', creditCost)
 
         console.log('Sending FormData request to:', `${API_BASE_URL}/api/mobile/enhance`)
         const startTime = Date.now()
@@ -274,12 +278,14 @@ class EnhancementService {
         style: params.style,
         project_name: params.projectName,
         shoot_id: params.shootId,
+        credit_cost: params.creditCost ?? 1,
       }
       console.log('Request body prepared:', {
         imageLength: requestBody.image.length,
         style: requestBody.style,
         project_name: requestBody.project_name,
         shoot_id: requestBody.shoot_id,
+        credit_cost: requestBody.credit_cost,
       })
       
       console.log('Sending base64 request to:', `${API_BASE_URL}/api/mobile/enhance-base64`)

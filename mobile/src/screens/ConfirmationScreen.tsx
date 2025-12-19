@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   View,
   Text,
@@ -7,6 +7,8 @@ import {
   ScrollView,
   Animated,
   Easing,
+  Alert,
+  ActivityIndicator,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
@@ -15,6 +17,7 @@ import { BlurView } from 'expo-blur'
 import Svg, { Path, Circle } from 'react-native-svg'
 import { usePhotos } from '../context/PhotoContext'
 import { useListings } from '../context/ListingsContext'
+import { useAuth } from '../context/AuthContext'
 import hapticFeedback from '../utils/haptics'
 
 // Back icon
@@ -108,12 +111,19 @@ export default function ConfirmationScreen() {
   const route = useRoute()
   const { selectedPhotos } = usePhotos()
   const { addListing } = useListings()
+  const { credits } = useAuth()
   const currentStep = 3
+  const [isChecking, setIsChecking] = useState(false)
 
   // Get data from previous screens
   const selectedStyle = (route.params as any)?.style || 'Flambient'
   const photoCount = selectedPhotos.length || 1
-  const tokenCost = photoCount * 2 // Example: 2 tokens per photo
+
+  // Credit calculation - currently 1 credit per photo
+  // This can be modified in the future based on style, options, etc.
+  const creditPerPhoto = 1
+  const requiredCredits = photoCount * creditPerPhoto
+  const hasEnoughCredits = credits >= requiredCredits
 
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -171,6 +181,26 @@ export default function ConfirmationScreen() {
   }
 
   const handleConfirm = () => {
+    // Check credits BEFORE starting
+    if (!hasEnoughCredits) {
+      hapticFeedback.notification('warning')
+      Alert.alert(
+        'Insufficient Credits',
+        `You need ${requiredCredits} credit${requiredCredits > 1 ? 's' : ''} to enhance ${photoCount} photo${photoCount > 1 ? 's' : ''}, but you only have ${credits}.\n\nWould you like to purchase more?`,
+        [
+          {
+            text: 'Not Now',
+            style: 'cancel',
+          },
+          {
+            text: 'Buy Credits',
+            onPress: () => navigation.navigate('Credits' as never),
+          },
+        ]
+      )
+      return
+    }
+
     hapticFeedback.medium()
 
     const styleMapping: { [key: string]: 'luster' | 'flambient' } = {
@@ -201,6 +231,7 @@ export default function ConfirmationScreen() {
       style: apiStyle,
       photos: selectedPhotos,
       photoCount: photoCount,
+      creditPerPhoto: creditPerPhoto,
     } as never)
   }
 
@@ -329,12 +360,18 @@ export default function ConfirmationScreen() {
                 <Text style={styles.costLabel}>Total Cost</Text>
               </View>
               <View style={styles.costValueContainer}>
-                <Text style={styles.costValue}>{tokenCost}</Text>
-                <Text style={styles.costUnit}>Credits</Text>
+                <Text style={styles.costValue}>{requiredCredits}</Text>
+                <Text style={styles.costUnit}>Credit{requiredCredits > 1 ? 's' : ''}</Text>
               </View>
               <Text style={styles.costDetail}>
-                {photoCount} photo{photoCount > 1 ? 's' : ''} × 2 credits each
+                {photoCount} photo{photoCount > 1 ? 's' : ''} × 1 credit each
               </Text>
+              <View style={styles.balanceRow}>
+                <Text style={styles.balanceLabel}>Your balance:</Text>
+                <Text style={[styles.balanceValue, !hasEnoughCredits && styles.balanceInsufficient]}>
+                  {credits} credit{credits !== 1 ? 's' : ''}
+                </Text>
+              </View>
             </BlurView>
           </Animated.View>
         </ScrollView>
@@ -533,6 +570,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 0, 0, 0.05)',
+  },
+  balanceLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  balanceValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  balanceInsufficient: {
+    color: '#EF4444',
   },
   bottomContainer: {
     paddingHorizontal: 24,

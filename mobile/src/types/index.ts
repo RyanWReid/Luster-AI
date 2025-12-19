@@ -114,6 +114,7 @@ export type RootStackParamList = {
     style?: EnhancementStyle
     photos?: Photo[] | string[]  // Can be Photo objects or URI strings
     photoCount?: number
+    creditPerPhoto?: number  // Credit cost per photo (for flexible pricing)
   }
   Result: {
     propertyId?: string
