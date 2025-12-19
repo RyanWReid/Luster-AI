@@ -23,6 +23,7 @@ import creditService from '../services/creditService'
 import hapticFeedback from '../utils/haptics'
 import { useErrorHandler } from '../hooks/useErrorHandler'
 import { RootStackParamList, isValidStyle } from '../types'
+import InsufficientCreditsModal from '../components/InsufficientCreditsModal'
 
 const { width } = Dimensions.get('window')
 
@@ -98,6 +99,10 @@ export default function ProcessingScreen() {
   const [enhancedUrls, setEnhancedUrls] = useState<string[]>([])
   const [canDismiss, setCanDismiss] = useState(false)
   const [propertyId, setPropertyId] = useState<string | null>(existingPropertyId)
+
+  // State for insufficient credits modal
+  const [showCreditsModal, setShowCreditsModal] = useState(false)
+  const [creditsInfo, setCreditsInfo] = useState({ current: 0, required: 0 })
 
   // Use ref to track processing state (doesn't trigger re-renders)
   const hasStartedProcessing = useRef(false)
@@ -270,21 +275,8 @@ export default function ProcessingScreen() {
 
           if (currentBalance < requiredCredits) {
             hapticFeedback.notification('warning')
-            Alert.alert(
-              'Not Enough Credits',
-              `You need ${requiredCredits} credits to enhance ${photos.length} photo${photos.length > 1 ? 's' : ''}, but you only have ${currentBalance}.\n\nWould you like to purchase more credits?`,
-              [
-                {
-                  text: 'Not Now',
-                  style: 'cancel',
-                  onPress: () => navigation.navigate('Main' as never),
-                },
-                {
-                  text: 'Buy Credits',
-                  onPress: () => navigation.navigate('Credits' as never),
-                },
-              ]
-            )
+            setCreditsInfo({ current: currentBalance, required: requiredCredits })
+            setShowCreditsModal(true)
             return // Exit early - don't start processing
           }
           console.log(`✅ Credit pre-check passed: ${currentBalance} available, ${requiredCredits} required`)
@@ -370,24 +362,9 @@ export default function ProcessingScreen() {
                   error: 'Insufficient credits',
                 })
               }
-              Alert.alert(
-                'Insufficient Credits',
-                'You need more credits to enhance photos. Would you like to purchase more?',
-                [
-                  {
-                    text: 'Not Now',
-                    style: 'cancel',
-                    onPress: () => navigation.navigate('Main' as never),
-                  },
-                  {
-                    text: 'Buy Credits',
-                    onPress: () => {
-                      // Navigate directly to Credits screen
-                      navigation.navigate('Credits' as never)
-                    },
-                  },
-                ]
-              )
+              // Show the custom modal
+              setCreditsInfo({ current: 0, required: 1 })
+              setShowCreditsModal(true)
               return // Exit early
             }
 
@@ -432,9 +409,12 @@ export default function ProcessingScreen() {
           console.error('Failed to refresh credits after enhancement:', error)
         }
 
-        // Don't auto-navigate - just go back to dashboard
-        // User can click the property card to see results
-        navigation.navigate('Main' as never)
+        // Navigate to Result screen to show before/after and save option
+        navigation.navigate('Result' as never, {
+          propertyId: currentPropertyId,
+          enhancedPhotos: results,
+          originalPhotos: photos,
+        } as never)
       } catch (error) {
         console.error('Enhancement failed:', error)
         hapticFeedback.notification('error')
@@ -477,6 +457,16 @@ export default function ProcessingScreen() {
     } else {
       navigation.goBack()
     }
+  }
+
+  const handleCreditsModalDismiss = () => {
+    setShowCreditsModal(false)
+    navigation.navigate('Main' as never)
+  }
+
+  const handleBuyCredits = () => {
+    setShowCreditsModal(false)
+    navigation.navigate('Credits' as never)
   }
 
   return (
@@ -633,6 +623,15 @@ export default function ProcessingScreen() {
           )}
         </Animated.View>
       </SafeAreaView>
+
+      {/* Insufficient Credits Modal */}
+      <InsufficientCreditsModal
+        visible={showCreditsModal}
+        currentCredits={creditsInfo.current}
+        requiredCredits={creditsInfo.required}
+        onDismiss={handleCreditsModalDismiss}
+        onBuyCredits={handleBuyCredits}
+      />
     </View>
   )
 }
