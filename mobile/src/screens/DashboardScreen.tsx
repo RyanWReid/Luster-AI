@@ -229,7 +229,16 @@ export default function DashboardScreenNew() {
 
   const handlePropertyPress = (item: any) => {
     // Navigate based on property status
-    if (item.status === 'processing') {
+    if (item.status === 'failed') {
+      // Property failed - show error and offer to retry or delete
+      Alert.alert(
+        'Enhancement Failed',
+        item.error || 'An unknown error occurred during enhancement.',
+        [
+          { text: 'OK', style: 'cancel' },
+        ]
+      )
+    } else if (item.status === 'processing') {
       // Property is still processing - go to ProcessingScreen
       navigation.navigate('Processing' as never, {
         propertyId: item.id,
@@ -336,12 +345,14 @@ export default function DashboardScreenNew() {
 
     const isProcessing = item.status === 'processing'
     const isReady = item.status === 'ready'
+    const isFailed = item.status === 'failed'
 
     return (
       <Animated.View
         style={[
           styles.gridCard,
           isReady && styles.gridCardReady,
+          isFailed && styles.gridCardFailed,
           {
             transform: [{ scale: cardScale }],
             opacity: fadeAnim,
@@ -417,9 +428,27 @@ export default function DashboardScreenNew() {
                 </Animated.View>
               </BlurView>
             )}
+
+            {/* Failed State: Red tint with X icon */}
+            {isFailed && (
+              <View style={styles.failedOverlay}>
+                <View style={styles.failedBadge}>
+                  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+                    <Path
+                      d="M18 6L6 18M6 6l12 12"
+                      stroke="#FFFFFF"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </Svg>
+                  <Text style={styles.failedText}>Failed</Text>
+                </View>
+              </View>
+            )}
           </View>
-          {/* Bottom text overlay (only show when NOT ready and NOT processing) */}
-          {!isReady && !isProcessing && (
+          {/* Bottom text overlay (only show when NOT ready, NOT processing, NOT failed) */}
+          {!isReady && !isProcessing && !isFailed && (
             <BlurView intensity={60} tint="light" style={styles.gridOverlay}>
               <Text style={styles.gridAddress} numberOfLines={2}>
                 {item.address}
@@ -858,6 +887,36 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 12,
+  },
+  // Failed State
+  gridCardFailed: {
+    borderWidth: 2,
+    borderColor: '#ef4444',
+  },
+  failedOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(239, 68, 68, 0.3)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  failedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  failedText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
   },
   glowBorder: {
     ...StyleSheet.absoluteFillObject,
