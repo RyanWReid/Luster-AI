@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Optional
+from typing import Dict, Optional
 
 import boto3
 from botocore.config import Config
