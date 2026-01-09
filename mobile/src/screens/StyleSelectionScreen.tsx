@@ -72,7 +72,8 @@ const StepIndicator = ({ currentStep, totalSteps }: StepIndicatorProps) => {
   )
 }
 
-type StyleOption = 'Flambient' | 'Minimalist' | 'Luster'
+type StyleOption = 'Natural' | 'Warm' | 'Luster'
+type BackendStyle = 'flambient' | 'warm' | 'luster'
 
 interface StyleCardProps {
   title: StyleOption
@@ -155,6 +156,7 @@ export default function StyleSelectionScreen() {
   const navigation = useNavigation<StyleSelectionNavigationProp>()
   const { selectedPhotos } = usePhotos()
   const [selectedStyle, setSelectedStyle] = useState<StyleOption | null>(null)
+  const [selectedBackendStyle, setSelectedBackendStyle] = useState<BackendStyle | null>(null)
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const currentStep = 2
 
@@ -199,10 +201,11 @@ export default function StyleSelectionScreen() {
   }, [])
 
   // Three distinct style options with unique thumbnails
+  // Maps to backend styles: natural->flambient, warm->warm, clean->luster
   const styleOptions = [
-    { title: 'Flambient' as StyleOption, image: require('../../assets/thumbnails/natural-thumbnail.png') },
-    { title: 'Minimalist' as StyleOption, image: require('../../assets/thumbnails/warm-thumbnail.png') },
-    { title: 'Luster' as StyleOption, image: require('../../assets/thumbnails/clean-thumbnail.png') },
+    { title: 'Natural' as StyleOption, image: require('../../assets/thumbnails/old/natural-thumbnail.png'), backendStyle: 'flambient' },
+    { title: 'Warm' as StyleOption, image: require('../../assets/thumbnails/old/warm-thumbnail.png'), backendStyle: 'warm' },
+    { title: 'Luster' as StyleOption, image: require('../../assets/thumbnails/old/clean-thumbnail.png'), backendStyle: 'luster' },
   ]
 
   const handleClose = () => {
@@ -211,10 +214,11 @@ export default function StyleSelectionScreen() {
   }
 
   const handleChooseStyle = () => {
-    if (selectedStyle) {
+    if (selectedStyle && selectedBackendStyle) {
       hapticFeedback.medium()
       navigation.navigate('Confirmation', {
         style: selectedStyle,
+        backendStyle: selectedBackendStyle,
         photoCount: selectedPhotos.length || 1,
       })
     }
@@ -342,6 +346,7 @@ export default function StyleSelectionScreen() {
                   onSelect={() => {
                     hapticFeedback.selection()
                     setSelectedStyle(option.title)
+                    setSelectedBackendStyle(option.backendStyle)
                     setSelectedIndex(index)
                   }}
                 />

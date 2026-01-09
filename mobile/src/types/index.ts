@@ -8,15 +8,21 @@
 // =============================================================================
 
 /**
- * Valid enhancement styles supported by the backend
+ * Display style names shown to users in the mobile app
  */
-export type EnhancementStyle = 'luster' | 'flambient'
+export type DisplayStyle = 'Natural' | 'Warm' | 'Luster'
+
+/**
+ * Valid enhancement styles supported by the backend API
+ * Maps: Natural -> flambient, Warm -> warm, Luster -> luster
+ */
+export type EnhancementStyle = 'luster' | 'flambient' | 'warm'
 
 /**
  * Type guard to validate enhancement style
  */
 export function isValidStyle(style: unknown): style is EnhancementStyle {
-  return style === 'luster' || style === 'flambient'
+  return style === 'luster' || style === 'flambient' || style === 'warm'
 }
 
 // =============================================================================
@@ -106,7 +112,8 @@ export type RootStackParamList = {
     photos?: Photo[]
   }
   Confirmation: {
-    style: EnhancementStyle
+    style: DisplayStyle        // Display name for UI (Natural, Warm, Luster)
+    backendStyle: EnhancementStyle  // Backend API style (flambient, warm, luster)
     photoCount: number
   }
   Processing: {

@@ -116,7 +116,8 @@ export default function ConfirmationScreen() {
   const [isChecking, setIsChecking] = useState(false)
 
   // Get data from previous screens
-  const selectedStyle = (route.params as any)?.style || 'Flambient'
+  const selectedStyle = (route.params as any)?.style || 'Natural'
+  const backendStyle = (route.params as any)?.backendStyle || 'flambient'
   const photoCount = selectedPhotos.length || 1
 
   // Credit calculation - currently 1 credit per photo
@@ -125,26 +126,36 @@ export default function ConfirmationScreen() {
   const requiredCredits = photoCount * creditPerPhoto
   const hasEnoughCredits = credits >= requiredCredits
 
-  // Animation refs
-  const fadeAnim = useRef(new Animated.Value(0)).current
-  const scaleAnim = useRef(new Animated.Value(0.95)).current
+  // Staggered entrance animations
+  const headerAnim = useRef(new Animated.Value(0)).current
+  const stepAnim = useRef(new Animated.Value(0)).current
+  const row1Anim = useRef(new Animated.Value(0)).current
+  const row2Anim = useRef(new Animated.Value(0)).current
+  const costAnim = useRef(new Animated.Value(0)).current
+  const buttonAnim = useRef(new Animated.Value(0)).current
   const blobAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
-    // Entrance animations
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 8,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start()
+    // Staggered entrance sequence
+    const animations = [
+      { anim: headerAnim, delay: 0 },
+      { anim: stepAnim, delay: 80 },
+      { anim: row1Anim, delay: 160 },
+      { anim: row2Anim, delay: 240 },
+      { anim: costAnim, delay: 320 },
+      { anim: buttonAnim, delay: 420 },
+    ]
+
+    animations.forEach(({ anim, delay }) => {
+      setTimeout(() => {
+        Animated.spring(anim, {
+          toValue: 1,
+          friction: 8,
+          tension: 50,
+          useNativeDriver: true,
+        }).start()
+      }, delay)
+    })
 
     // Background blob animation
     Animated.loop(
@@ -203,14 +214,6 @@ export default function ConfirmationScreen() {
 
     hapticFeedback.medium()
 
-    const styleMapping: { [key: string]: 'luster' | 'flambient' } = {
-      Luster: 'luster',
-      Flambient: 'flambient',
-      Minimalist: 'flambient',
-    }
-
-    const apiStyle = styleMapping[selectedStyle] || 'luster'
-
     // Create property card BEFORE entering ProcessingScreen
     const propertyId = addListing({
       address: 'New Project',
@@ -225,10 +228,11 @@ export default function ConfirmationScreen() {
     })
 
     console.log('ConfirmationScreen: Created property with ID:', propertyId)
+    console.log('ConfirmationScreen: Using backend style:', backendStyle)
 
     navigation.navigate('Processing' as never, {
       propertyId: propertyId,
-      style: apiStyle,
+      style: backendStyle,  // Use the backend style passed from StyleSelection
       photos: selectedPhotos,
       photoCount: photoCount,
       creditPerPhoto: creditPerPhoto,
@@ -301,8 +305,15 @@ export default function ConfirmationScreen() {
           style={[
             styles.header,
             {
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }],
+              opacity: headerAnim,
+              transform: [
+                {
+                  translateY: headerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-20, 0],
+                  }),
+                },
+              ],
             },
           ]}
         >
@@ -322,7 +333,15 @@ export default function ConfirmationScreen() {
           style={[
             styles.stepIndicatorWrapper,
             {
-              opacity: fadeAnim,
+              opacity: stepAnim,
+              transform: [
+                {
+                  scale: stepAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.9, 1],
+                  }),
+                },
+              ],
             },
           ]}
         >
@@ -334,26 +353,77 @@ export default function ConfirmationScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
-          <Animated.View
-            style={[
-              styles.summarySection,
-              {
-                opacity: fadeAnim,
-                transform: [{ scale: scaleAnim }],
-              },
-            ]}
-          >
+          <View style={styles.summarySection}>
             {/* Vibe Selection */}
-            <SummaryRow label="Vibe" value={selectedStyle} onEdit={handleEditVibe} />
+            <Animated.View
+              style={{
+                opacity: row1Anim,
+                transform: [
+                  {
+                    translateY: row1Anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  },
+                  {
+                    scale: row1Anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.95, 1],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <SummaryRow label="Vibe" value={selectedStyle} onEdit={handleEditVibe} />
+            </Animated.View>
 
             {/* Photos Count */}
-            <SummaryRow
-              label="Photos"
-              value={`${photoCount} Photo${photoCount > 1 ? 's' : ''}`}
-              onEdit={handleEditPhotos}
-            />
+            <Animated.View
+              style={{
+                opacity: row2Anim,
+                transform: [
+                  {
+                    translateY: row2Anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [20, 0],
+                    }),
+                  },
+                  {
+                    scale: row2Anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.95, 1],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <SummaryRow
+                label="Photos"
+                value={`${photoCount} Photo${photoCount > 1 ? 's' : ''}`}
+                onEdit={handleEditPhotos}
+              />
+            </Animated.View>
 
             {/* Cost Display */}
+            <Animated.View
+              style={{
+                opacity: costAnim,
+                transform: [
+                  {
+                    translateY: costAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [30, 0],
+                    }),
+                  },
+                  {
+                    scale: costAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.92, 1],
+                    }),
+                  },
+                ],
+              }}
+            >
             <BlurView intensity={60} tint="light" style={styles.costCard}>
               <View style={styles.costHeader}>
                 <CoinIcon />
@@ -373,7 +443,8 @@ export default function ConfirmationScreen() {
                 </Text>
               </View>
             </BlurView>
-          </Animated.View>
+            </Animated.View>
+          </View>
         </ScrollView>
 
         {/* Confirm Button */}
@@ -381,7 +452,21 @@ export default function ConfirmationScreen() {
           style={[
             styles.bottomContainer,
             {
-              opacity: fadeAnim,
+              opacity: buttonAnim,
+              transform: [
+                {
+                  translateY: buttonAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [40, 0],
+                  }),
+                },
+                {
+                  scale: buttonAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.9, 1],
+                  }),
+                },
+              ],
             },
           ]}
         >

@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { PurchasesOffering, PurchasesPackage } from 'react-native-purchases'
 import { Alert } from 'react-native'
-import revenueCatService from '../services/revenueCatService'
+import revenueCatService, { PAYWALL_RESULT, PaywallResult } from '../services/revenueCatService'
 import hapticFeedback from '../utils/haptics'
 
 export interface UseRevenueCatOptions {
@@ -20,10 +20,13 @@ export interface UseRevenueCatResult {
   offerings: PurchasesOffering | null
   loading: boolean
   hasActiveSubscription: boolean
+  hasProAccess: boolean
 
   // Actions
   purchasePackage: (pkg: PurchasesPackage) => Promise<boolean>
   restorePurchases: () => Promise<boolean>
+  presentPaywall: () => Promise<PaywallResult>
+  presentCustomerCenter: () => Promise<void>
   refresh: () => Promise<void>
 }
 
@@ -32,6 +35,7 @@ export function useRevenueCat(options: UseRevenueCatOptions = {}): UseRevenueCat
   const [offerings, setOfferings] = useState<PurchasesOffering | null>(null)
   const [loading, setLoading] = useState(true)
   const [hasActiveSubscription, setHasActiveSubscription] = useState(false)
+  const [hasProAccess, setHasProAccess] = useState(false)
 
   // Initialize RevenueCat and fetch offerings
   const refresh = useCallback(async () => {
@@ -49,12 +53,12 @@ export function useRevenueCat(options: UseRevenueCatOptions = {}): UseRevenueCat
       const hasActive = await revenueCatService.hasActiveSubscription()
       setHasActiveSubscription(hasActive)
 
+      // Check Pro access
+      const hasPro = await revenueCatService.hasProAccess()
+      setHasProAccess(hasPro)
+
     } catch (error) {
       console.error('Error initializing RevenueCat:', error)
-      Alert.alert(
-        'Error',
-        'Unable to load payment options. Please try again later.'
-      )
     } finally {
       setLoading(false)
     }
@@ -79,8 +83,10 @@ export function useRevenueCat(options: UseRevenueCatOptions = {}): UseRevenueCat
         const hasActive = await revenueCatService.hasActiveSubscription()
         setHasActiveSubscription(hasActive)
 
-        // CRITICAL: Refresh credits from backend after successful purchase
-        // RevenueCat webhook will have added credits, so we need to fetch the new balance
+        const hasPro = await revenueCatService.hasProAccess()
+        setHasProAccess(hasPro)
+
+        // Refresh credits from backend after successful purchase
         if (onCreditsUpdated) {
           try {
             await onCreditsUpdated()
@@ -99,7 +105,7 @@ export function useRevenueCat(options: UseRevenueCatOptions = {}): UseRevenueCat
         return true
       } else {
         // Only show error if not cancelled by user
-        if (result.error && result.error !== 'Purchase cancelled') {
+        if (!result.userCancelled) {
           hapticFeedback.notification('error')
           Alert.alert(
             'Purchase Failed',
@@ -118,7 +124,7 @@ export function useRevenueCat(options: UseRevenueCatOptions = {}): UseRevenueCat
       )
       return false
     }
-  }, [])
+  }, [onCreditsUpdated])
 
   // Restore purchases
   const restorePurchases = useCallback(async (): Promise<boolean> => {
@@ -132,7 +138,10 @@ export function useRevenueCat(options: UseRevenueCatOptions = {}): UseRevenueCat
         const hasActive = await revenueCatService.hasActiveSubscription()
         setHasActiveSubscription(hasActive)
 
-        if (hasActive) {
+        const hasPro = await revenueCatService.hasProAccess()
+        setHasProAccess(hasPro)
+
+        if (hasActive || hasPro) {
           hapticFeedback.notification('success')
           Alert.alert(
             'Restored!',
@@ -169,12 +178,61 @@ export function useRevenueCat(options: UseRevenueCatOptions = {}): UseRevenueCat
     }
   }, [])
 
+  // Present paywall
+  const presentPaywall = useCallback(async (): Promise<PaywallResult> => {
+    try {
+      const result = await revenueCatService.presentPaywall()
+
+      if (result.purchased || result.restored) {
+        hapticFeedback.notification('success')
+
+        // Refresh subscription status
+        const hasActive = await revenueCatService.hasActiveSubscription()
+        setHasActiveSubscription(hasActive)
+
+        const hasPro = await revenueCatService.hasProAccess()
+        setHasProAccess(hasPro)
+
+        // Refresh credits from backend
+        if (onCreditsUpdated) {
+          try {
+            await onCreditsUpdated()
+          } catch (error) {
+            console.error('Failed to refresh credits:', error)
+          }
+        }
+      }
+
+      return result
+    } catch (error) {
+      console.error('Paywall error:', error)
+      return { result: PAYWALL_RESULT.ERROR, purchased: false, restored: false }
+    }
+  }, [onCreditsUpdated])
+
+  // Present Customer Center
+  const presentCustomerCenter = useCallback(async (): Promise<void> => {
+    try {
+      await revenueCatService.presentCustomerCenter()
+    } catch (error) {
+      console.error('Customer Center error:', error)
+      Alert.alert(
+        'Error',
+        'Unable to open subscription management. Please try again.',
+        [{ text: 'OK' }]
+      )
+    }
+  }, [])
+
   return {
     offerings,
     loading,
     hasActiveSubscription,
+    hasProAccess,
     purchasePackage,
     restorePurchases,
+    presentPaywall,
+    presentCustomerCenter,
     refresh,
   }
 }

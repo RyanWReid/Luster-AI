@@ -21,7 +21,7 @@ import { BlurView } from 'expo-blur'
 import Svg, { Path, Circle, Rect } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { useListings } from '../context/ListingsContext'
-import { usePhotos } from '../context/PhotoContext'
+import { useAuth } from '../context/AuthContext'
 import hapticFeedback from '../utils/haptics'
 
 const { width, height } = Dimensions.get('window')
@@ -125,14 +125,15 @@ const mockProperties = [
 export default function DashboardScreenNew() {
   const navigation = useNavigation()
   const { listings, isLoading: isLoadingListings, clearListings, syncFromBackend } = useListings()
-  const { creditBalance, isLoadingCredits } = usePhotos()
+  const { credits, refreshCredits } = useAuth()
   const showMockData = false // Toggle this to true to show mock data cards
   const [isRefreshing, setIsRefreshing] = useState(false)
 
-  // Sync listings from backend on mount (restore after reinstall)
+  // Sync listings and credits from backend on mount
   useEffect(() => {
-    console.log('🏠 DashboardScreenNew mounted - syncing listings from backend')
+    console.log('🏠 DashboardScreenNew mounted - syncing data from backend')
     syncFromBackend()
+    refreshCredits()
   }, [])
 
   // Pull-to-refresh handler
@@ -141,7 +142,7 @@ export default function DashboardScreenNew() {
     setIsRefreshing(true)
     hapticFeedback.light()
     try {
-      await syncFromBackend()
+      await Promise.all([syncFromBackend(), refreshCredits()])
     } finally {
       setIsRefreshing(false)
     }
@@ -181,39 +182,102 @@ export default function DashboardScreenNew() {
   const scaleAnim = useRef(new Animated.Value(0.95)).current
   const blobAnim = useRef(new Animated.Value(0)).current
 
+  // Staggered animations
+  const headerAnim = useRef(new Animated.Value(0)).current
+  const statsAnim = useRef(new Animated.Value(0)).current
+  const stat1Anim = useRef(new Animated.Value(0)).current
+  const stat2Anim = useRef(new Animated.Value(0)).current
+  const sectionAnim = useRef(new Animated.Value(0)).current
+  const creditPulse = useRef(new Animated.Value(1)).current
+
+  // Get time-based greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+
   useEffect(() => {
-    // Entrance animation
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
+    // Staggered entrance animations
+    const animations = [
+      // Header first
+      Animated.parallel([
+        Animated.timing(headerAnim, {
+          toValue: 1,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.spring(fadeAnim, {
+          toValue: 1,
+          friction: 8,
+          tension: 40,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]
+
+    Animated.stagger(80, animations).start()
+
+    // Stats cards staggered
+    setTimeout(() => {
+      Animated.spring(stat1Anim, {
         toValue: 1,
-        duration: 600,
+        friction: 7,
+        tension: 50,
         useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
+      }).start()
+    }, 200)
+
+    setTimeout(() => {
+      Animated.spring(stat2Anim, {
+        toValue: 1,
+        friction: 7,
+        tension: 50,
         useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
+      }).start()
+    }, 280)
+
+    // Section title
+    setTimeout(() => {
+      Animated.spring(sectionAnim, {
         toValue: 1,
         friction: 8,
         tension: 40,
         useNativeDriver: true,
-      }),
-    ]).start()
+      }).start()
+    }, 350)
+
+    // Subtle credit button pulse
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(creditPulse, {
+          toValue: 1.03,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(creditPulse, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start()
 
     // Soft blob animation for background
     Animated.loop(
       Animated.sequence([
         Animated.timing(blobAnim, {
           toValue: 1,
-          duration: 8000,
-          useNativeDriver: false,
+          duration: 10000,
+          useNativeDriver: true,
         }),
         Animated.timing(blobAnim, {
           toValue: 0,
-          duration: 8000,
-          useNativeDriver: false,
+          duration: 10000,
+          useNativeDriver: true,
         }),
       ])
     ).start()
@@ -261,9 +325,23 @@ export default function DashboardScreenNew() {
 
   const AnimatedCard = ({ item, index }: { item: any; index: number }) => {
     const cardScale = useRef(new Animated.Value(1)).current
+    const cardEntrance = useRef(new Animated.Value(0)).current
     const spinAnim = useRef(new Animated.Value(0)).current
     const pulseAnim = useRef(new Animated.Value(1)).current
     const glowAnim = useRef(new Animated.Value(0)).current
+
+    // Staggered card entrance
+    useEffect(() => {
+      const delay = 400 + (index * 80)
+      setTimeout(() => {
+        Animated.spring(cardEntrance, {
+          toValue: 1,
+          friction: 7,
+          tension: 50,
+          useNativeDriver: true,
+        }).start()
+      }, delay)
+    }, [index])
 
     useEffect(() => {
       if (item.status === 'processing') {
@@ -354,8 +432,11 @@ export default function DashboardScreenNew() {
           isReady && styles.gridCardReady,
           isFailed && styles.gridCardFailed,
           {
-            transform: [{ scale: cardScale }],
-            opacity: fadeAnim,
+            opacity: cardEntrance,
+            transform: [
+              { scale: Animated.multiply(cardScale, cardEntrance.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] })) },
+              { translateY: cardEntrance.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
+            ],
           },
         ]}
       >
@@ -541,17 +622,22 @@ export default function DashboardScreenNew() {
             style={[
               styles.header,
               {
-                opacity: fadeAnim,
-                transform: [{ translateY: slideAnim }],
+                opacity: headerAnim,
+                transform: [{
+                  translateY: headerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [20, 0],
+                  }),
+                }],
               },
             ]}
           >
             <View>
-              <Text style={styles.greeting}>Good afternoon</Text>
+              <Text style={styles.greeting}>{getGreeting()}</Text>
               <Text style={styles.title}>Your Properties</Text>
             </View>
 
-            <View style={styles.headerRight}>
+            <Animated.View style={[styles.headerRight, { transform: [{ scale: creditPulse }] }]}>
               <TouchableOpacity
                 onPress={handleCreditsPress}
                 style={styles.creditButton}
@@ -559,37 +645,50 @@ export default function DashboardScreenNew() {
               >
                 <BlurView intensity={60} tint="light" style={styles.creditBlur}>
                   <CoinIcon size={18} />
-                  <Text style={styles.creditText}>{creditBalance || 10}</Text>
+                  <Text style={styles.creditText}>{credits}</Text>
                 </BlurView>
               </TouchableOpacity>
-            </View>
+            </Animated.View>
           </Animated.View>
 
           {/* Stats Cards */}
-          <Animated.View
-            style={[
-              styles.statsContainer,
-              {
-                opacity: fadeAnim,
-                transform: [{ scale: scaleAnim }],
-              },
-            ]}
-          >
-            <BlurView intensity={60} tint="light" style={styles.statCard}>
-              <Text style={styles.statNumber}>{propertyCount}</Text>
-              <Text style={styles.statLabel}>Properties</Text>
-            </BlurView>
+          <View style={styles.statsContainer}>
+            <Animated.View
+              style={[
+                styles.statCardWrapper,
+                {
+                  opacity: stat1Anim,
+                  transform: [
+                    { translateY: stat1Anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
+                    { scale: stat1Anim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+                  ],
+                },
+              ]}
+            >
+              <BlurView intensity={60} tint="light" style={styles.statCard}>
+                <Text style={styles.statNumber}>{propertyCount}</Text>
+                <Text style={styles.statLabel}>Properties</Text>
+              </BlurView>
+            </Animated.View>
 
-            <BlurView intensity={60} tint="light" style={styles.statCard}>
-              <Text style={styles.statNumber}>{totalPhotoCount}</Text>
-              <Text style={styles.statLabel}>Photos</Text>
-            </BlurView>
-
-            <BlurView intensity={60} tint="light" style={styles.statCard}>
-              <Text style={styles.statNumber}>{creditBalance || 0}</Text>
-              <Text style={styles.statLabel}>Credits</Text>
-            </BlurView>
-          </Animated.View>
+            <Animated.View
+              style={[
+                styles.statCardWrapper,
+                {
+                  opacity: stat2Anim,
+                  transform: [
+                    { translateY: stat2Anim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
+                    { scale: stat2Anim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }) },
+                  ],
+                },
+              ]}
+            >
+              <BlurView intensity={60} tint="light" style={styles.statCard}>
+                <Text style={styles.statNumber}>{totalPhotoCount}</Text>
+                <Text style={styles.statLabel}>Photos</Text>
+              </BlurView>
+            </Animated.View>
+          </View>
 
 
           {/* Recent Properties - Always show */}
@@ -597,7 +696,13 @@ export default function DashboardScreenNew() {
             style={[
               styles.propertiesSection,
               {
-                opacity: fadeAnim,
+                opacity: sectionAnim,
+                transform: [{
+                  translateY: sectionAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [15, 0],
+                  }),
+                }],
               },
             ]}
           >
@@ -621,7 +726,7 @@ export default function DashboardScreenNew() {
 
             {displayData.length > 0 ? (
               <FlatList
-                data={displayData.slice(0, 4)}
+                data={displayData.slice(0, 6)}
                 renderItem={({ item, index }) => <AnimatedCard item={item} index={index} />}
                 keyExtractor={(item) => item.id}
                 horizontal={false}
@@ -754,8 +859,10 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     gap: 12,
   },
-  statCard: {
+  statCardWrapper: {
     flex: 1,
+  },
+  statCard: {
     padding: 16,
     borderRadius: 16,
     backgroundColor: 'rgba(255, 255, 255, 0.25)',

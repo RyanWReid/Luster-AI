@@ -206,7 +206,7 @@ FORBIDDEN:
                 try:
                     with open(image_path, "rb") as image_file:
                         response = self.client.images.edit(
-                            model="gpt-image-1",
+                            model="gpt-image-1.5",
                             image=image_file,
                             prompt=full_prompt,
                             size=size,

@@ -2,53 +2,68 @@ import Purchases, {
   PurchasesOffering,
   PurchasesPackage,
   CustomerInfo,
-  PurchasesStoreProduct,
   LOG_LEVEL,
+  PURCHASES_ERROR_CODE,
+  PurchasesError,
 } from 'react-native-purchases'
+import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui'
 import { Platform } from 'react-native'
-import AsyncStorage from '@react-native-async-storage/async-storage'
 
-// TODO: Replace with your actual RevenueCat API keys
-// Get these from https://app.revenuecat.com/projects
+// RevenueCat API Keys from environment
 const REVENUECAT_API_KEY = Platform.select({
-  ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || 'your_ios_key_here',
-  android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || 'your_android_key_here',
+  ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY || '',
+  android: process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY || '',
 })
 
-export interface SubscriptionPackage {
-  identifier: string
-  packageType: string
-  product: {
-    identifier: string
-    description: string
-    title: string
-    price: number
-    priceString: string
-    currencyCode: string
-    introPrice?: {
-      price: number
-      priceString: string
-      period: string
-    }
-  }
+// Entitlement identifiers - must match RevenueCat dashboard
+export const ENTITLEMENTS = {
+  PRO: 'Luster AI Pro',
+} as const
+
+// Product identifiers - must match App Store Connect / Google Play
+export const PRODUCT_IDS = {
+  // Consumable credit packs
+  CREDITS_10: 'com.lusterai.credits.10',
+  CREDITS_30: 'com.lusterai.credits.30',
+  CREDITS_60: 'com.lusterai.credits.60',
+  // Subscriptions
+  PRO_MONTHLY: 'com.lusterai.pro.monthly',
+  PRO_YEARLY: 'com.lusterai.pro.yearly',
+} as const
+
+// Credit amounts per product (for consumables)
+export const CREDIT_AMOUNTS: Record<string, number> = {
+  [PRODUCT_IDS.CREDITS_10]: 10,
+  [PRODUCT_IDS.CREDITS_30]: 30,
+  [PRODUCT_IDS.CREDITS_60]: 60,
 }
 
 export interface PurchaseResult {
   success: boolean
   customerInfo?: CustomerInfo
   error?: string
+  errorCode?: PURCHASES_ERROR_CODE
+  userCancelled?: boolean
+}
+
+export interface PaywallResult {
+  result: PAYWALL_RESULT
+  customerInfo?: CustomerInfo
+  purchased: boolean
+  restored: boolean
 }
 
 class RevenueCatService {
   private initialized = false
+  private currentUserId: string | null = null
 
   /**
    * Initialize RevenueCat SDK
-   * Call this once when the app starts
+   * Call this once when the app starts or user logs in
    */
   async initialize(userId?: string): Promise<void> {
-    if (this.initialized) {
-      console.log('RevenueCat already initialized')
+    if (!REVENUECAT_API_KEY) {
+      console.warn('RevenueCat API key not configured')
       return
     }
 
@@ -58,27 +73,60 @@ class RevenueCatService {
         Purchases.setLogLevel(LOG_LEVEL.DEBUG)
       }
 
-      // Configure SDK
-      if (REVENUECAT_API_KEY) {
+      if (!this.initialized) {
+        // First-time configuration
         Purchases.configure({
           apiKey: REVENUECAT_API_KEY,
-          appUserID: userId, // Optional: link to your user ID
+          appUserID: userId || undefined,
         })
-
         this.initialized = true
-        console.log('RevenueCat initialized successfully')
-
-        // Get initial customer info
-        const customerInfo = await Purchases.getCustomerInfo()
-        console.log('Customer info:', {
-          activeSubscriptions: customerInfo.activeSubscriptions,
-          entitlements: Object.keys(customerInfo.entitlements.active),
-        })
-      } else {
-        console.warn('RevenueCat API key not found. Set EXPO_PUBLIC_REVENUECAT_IOS_KEY or EXPO_PUBLIC_REVENUECAT_ANDROID_KEY')
+        this.currentUserId = userId || null
+        console.log('✅ RevenueCat initialized successfully')
+      } else if (userId && userId !== this.currentUserId) {
+        // User changed - log in with new user ID
+        await this.login(userId)
       }
+
+      // Log initial customer info
+      const customerInfo = await Purchases.getCustomerInfo()
+      console.log('📦 RevenueCat Customer Info:', {
+        userId: customerInfo.originalAppUserId,
+        activeSubscriptions: customerInfo.activeSubscriptions,
+        entitlements: Object.keys(customerInfo.entitlements.active),
+      })
     } catch (error) {
-      console.error('Failed to initialize RevenueCat:', error)
+      console.error('❌ Failed to initialize RevenueCat:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Login user to RevenueCat
+   * Links purchases to your user ID
+   */
+  async login(userId: string): Promise<CustomerInfo> {
+    try {
+      const { customerInfo } = await Purchases.logIn(userId)
+      this.currentUserId = userId
+      console.log('✅ RevenueCat user logged in:', userId)
+      return customerInfo
+    } catch (error) {
+      console.error('❌ RevenueCat login error:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Logout user from RevenueCat
+   */
+  async logout(): Promise<CustomerInfo> {
+    try {
+      const customerInfo = await Purchases.logOut()
+      this.currentUserId = null
+      console.log('✅ RevenueCat user logged out')
+      return customerInfo
+    } catch (error) {
+      console.error('❌ RevenueCat logout error:', error)
       throw error
     }
   }
@@ -90,56 +138,53 @@ class RevenueCatService {
     try {
       const offerings = await Purchases.getOfferings()
 
-      if (offerings.current !== null) {
-        console.log('Current offering:', offerings.current.identifier)
-        console.log('Available packages:', offerings.current.availablePackages.map(p => ({
+      if (offerings.current) {
+        console.log('📦 Current offering:', offerings.current.identifier)
+        console.log('📦 Available packages:', offerings.current.availablePackages.map(p => ({
           identifier: p.identifier,
+          productId: p.product.identifier,
           price: p.product.priceString,
         })))
         return offerings.current
-      } else {
-        console.log('No current offering found')
-        return null
       }
+
+      console.log('⚠️ No current offering found')
+      return null
     } catch (error) {
-      console.error('Error fetching offerings:', error)
+      console.error('❌ Error fetching offerings:', error)
       return null
     }
   }
 
   /**
-   * Purchase a package (subscription or one-time)
+   * Get all offerings
+   */
+  async getAllOfferings(): Promise<Record<string, PurchasesOffering>> {
+    try {
+      const offerings = await Purchases.getOfferings()
+      return offerings.all
+    } catch (error) {
+      console.error('❌ Error fetching all offerings:', error)
+      return {}
+    }
+  }
+
+  /**
+   * Purchase a package
    */
   async purchasePackage(packageToBuy: PurchasesPackage): Promise<PurchaseResult> {
     try {
-      console.log('Attempting to purchase:', packageToBuy.identifier)
-
+      console.log('💳 Purchasing package:', packageToBuy.identifier)
       const { customerInfo } = await Purchases.purchasePackage(packageToBuy)
 
-      console.log('Purchase successful:', {
+      console.log('✅ Purchase successful:', {
         activeSubscriptions: customerInfo.activeSubscriptions,
         entitlements: Object.keys(customerInfo.entitlements.active),
       })
 
-      return {
-        success: true,
-        customerInfo,
-      }
-    } catch (error: any) {
-      console.error('Purchase error:', error)
-
-      // Handle user cancellation gracefully
-      if (error.userCancelled) {
-        return {
-          success: false,
-          error: 'Purchase cancelled',
-        }
-      }
-
-      return {
-        success: false,
-        error: error.message || 'Purchase failed',
-      }
+      return { success: true, customerInfo }
+    } catch (error) {
+      return this.handlePurchaseError(error)
     }
   }
 
@@ -148,161 +193,296 @@ class RevenueCatService {
    */
   async purchaseProduct(productIdentifier: string): Promise<PurchaseResult> {
     try {
-      console.log('Attempting to purchase product:', productIdentifier)
+      console.log('💳 Purchasing product:', productIdentifier)
 
-      const { customerInfo } = await Purchases.purchaseStoreProduct(productIdentifier)
+      const offerings = await Purchases.getOfferings()
+      let packageToBuy: PurchasesPackage | undefined
 
-      console.log('Purchase successful:', {
-        activeSubscriptions: customerInfo.activeSubscriptions,
-        entitlements: Object.keys(customerInfo.entitlements.active),
-      })
-
-      return {
-        success: true,
-        customerInfo,
-      }
-    } catch (error: any) {
-      console.error('Purchase error:', error)
-
-      if (error.userCancelled) {
-        return {
-          success: false,
-          error: 'Purchase cancelled',
-        }
+      for (const offering of Object.values(offerings.all)) {
+        packageToBuy = offering.availablePackages.find(
+          pkg => pkg.product.identifier === productIdentifier
+        )
+        if (packageToBuy) break
       }
 
-      return {
-        success: false,
-        error: error.message || 'Purchase failed',
+      if (!packageToBuy) {
+        return { success: false, error: `Product not found: ${productIdentifier}` }
       }
+
+      return this.purchasePackage(packageToBuy)
+    } catch (error) {
+      return this.handlePurchaseError(error)
     }
+  }
+
+  /**
+   * Handle purchase errors
+   */
+  private handlePurchaseError(error: unknown): PurchaseResult {
+    const purchaseError = error as PurchasesError
+    console.error('❌ Purchase error:', purchaseError)
+
+    if (purchaseError.code === PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) {
+      return { success: false, userCancelled: true, error: 'Purchase cancelled', errorCode: purchaseError.code }
+    }
+
+    if (purchaseError.code === PURCHASES_ERROR_CODE.PAYMENT_PENDING_ERROR) {
+      return { success: false, error: 'Payment is pending approval', errorCode: purchaseError.code }
+    }
+
+    if (purchaseError.code === PURCHASES_ERROR_CODE.PRODUCT_ALREADY_PURCHASED_ERROR) {
+      return { success: false, error: 'You already own this product', errorCode: purchaseError.code }
+    }
+
+    return { success: false, error: purchaseError.message || 'Purchase failed', errorCode: purchaseError.code }
   }
 
   /**
    * Restore previous purchases
-   * Required by Apple App Store guidelines
    */
   async restorePurchases(): Promise<PurchaseResult> {
     try {
-      console.log('Restoring purchases...')
-
+      console.log('🔄 Restoring purchases...')
       const customerInfo = await Purchases.restorePurchases()
 
-      console.log('Restore successful:', {
+      console.log('✅ Restore result:', {
         activeSubscriptions: customerInfo.activeSubscriptions,
         entitlements: Object.keys(customerInfo.entitlements.active),
       })
 
-      return {
-        success: true,
-        customerInfo,
-      }
-    } catch (error: any) {
-      console.error('Restore error:', error)
-      return {
-        success: false,
-        error: error.message || 'Restore failed',
-      }
+      return { success: true, customerInfo }
+    } catch (error) {
+      return this.handlePurchaseError(error)
     }
   }
 
   /**
-   * Get current customer info (entitlements, subscriptions)
+   * Get current customer info
    */
   async getCustomerInfo(): Promise<CustomerInfo | null> {
     try {
-      const customerInfo = await Purchases.getCustomerInfo()
-      return customerInfo
+      return await Purchases.getCustomerInfo()
     } catch (error) {
-      console.error('Error getting customer info:', error)
+      console.error('❌ Error getting customer info:', error)
       return null
     }
   }
 
   /**
-   * Check if user has active subscription
+   * Check if user has Pro entitlement
    */
-  async hasActiveSubscription(): Promise<boolean> {
+  async hasProAccess(): Promise<boolean> {
     try {
       const customerInfo = await Purchases.getCustomerInfo()
-
-      // Check if user has any active entitlements
-      const hasActive = Object.keys(customerInfo.entitlements.active).length > 0
-
-      console.log('Active subscription check:', {
-        hasActive,
-        entitlements: Object.keys(customerInfo.entitlements.active),
-      })
-
-      return hasActive
+      return customerInfo.entitlements.active[ENTITLEMENTS.PRO] !== undefined
     } catch (error) {
-      console.error('Error checking subscription:', error)
+      console.error('❌ Error checking pro access:', error)
       return false
     }
   }
 
   /**
-   * Check if user has specific entitlement
+   * Check if user has any active subscription
+   */
+  async hasActiveSubscription(): Promise<boolean> {
+    try {
+      const customerInfo = await Purchases.getCustomerInfo()
+      return customerInfo.activeSubscriptions.length > 0
+    } catch (error) {
+      console.error('❌ Error checking subscription:', error)
+      return false
+    }
+  }
+
+  /**
+   * Check specific entitlement
    */
   async hasEntitlement(entitlementId: string): Promise<boolean> {
     try {
       const customerInfo = await Purchases.getCustomerInfo()
       return customerInfo.entitlements.active[entitlementId] !== undefined
     } catch (error) {
-      console.error('Error checking entitlement:', error)
+      console.error('❌ Error checking entitlement:', error)
       return false
     }
   }
 
   /**
-   * Get user ID from RevenueCat
+   * Get Pro subscription expiration date
    */
-  async getUserId(): Promise<string | null> {
+  async getSubscriptionExpirationDate(): Promise<Date | null> {
     try {
-      const appUserID = await Purchases.getAppUserID()
-      return appUserID
+      const customerInfo = await Purchases.getCustomerInfo()
+      const proEntitlement = customerInfo.entitlements.active[ENTITLEMENTS.PRO]
+      return proEntitlement?.expirationDate ? new Date(proEntitlement.expirationDate) : null
     } catch (error) {
-      console.error('Error getting user ID:', error)
+      console.error('❌ Error getting expiration date:', error)
+      return null
+    }
+  }
+
+  // ============================================
+  // PAYWALL METHODS (RevenueCat UI)
+  // ============================================
+
+  /**
+   * Present the RevenueCat Paywall
+   * This uses the paywall configured in RevenueCat dashboard
+   */
+  async presentPaywall(offeringIdentifier?: string): Promise<PaywallResult> {
+    try {
+      console.log('💰 Presenting paywall...', offeringIdentifier ? `(Offering: ${offeringIdentifier})` : '')
+
+      const result = await RevenueCatUI.presentPaywall({
+        offering: offeringIdentifier ? await this.getOfferingById(offeringIdentifier) : undefined,
+      })
+
+      const customerInfo = await Purchases.getCustomerInfo()
+
+      const paywallResult: PaywallResult = {
+        result,
+        customerInfo,
+        purchased: result === PAYWALL_RESULT.PURCHASED,
+        restored: result === PAYWALL_RESULT.RESTORED,
+      }
+
+      console.log('💰 Paywall result:', {
+        result: PAYWALL_RESULT[result],
+        purchased: paywallResult.purchased,
+        restored: paywallResult.restored,
+      })
+
+      return paywallResult
+    } catch (error) {
+      console.error('❌ Paywall error:', error)
+      return { result: PAYWALL_RESULT.ERROR, purchased: false, restored: false }
+    }
+  }
+
+  /**
+   * Present paywall only if user doesn't have required entitlement
+   */
+  async presentPaywallIfNeeded(requiredEntitlement: string = ENTITLEMENTS.PRO): Promise<PaywallResult> {
+    try {
+      console.log('💰 Presenting paywall if needed for:', requiredEntitlement)
+
+      const result = await RevenueCatUI.presentPaywallIfNeeded({
+        requiredEntitlementIdentifier: requiredEntitlement,
+      })
+
+      const customerInfo = await Purchases.getCustomerInfo()
+
+      return {
+        result,
+        customerInfo,
+        purchased: result === PAYWALL_RESULT.PURCHASED,
+        restored: result === PAYWALL_RESULT.RESTORED,
+      }
+    } catch (error) {
+      console.error('❌ Paywall if needed error:', error)
+      return { result: PAYWALL_RESULT.ERROR, purchased: false, restored: false }
+    }
+  }
+
+  /**
+   * Get offering by identifier
+   */
+  private async getOfferingById(identifier: string): Promise<PurchasesOffering | undefined> {
+    const offerings = await Purchases.getOfferings()
+    return offerings.all[identifier]
+  }
+
+  // ============================================
+  // CUSTOMER CENTER (Subscription Management)
+  // ============================================
+
+  /**
+   * Present Customer Center for subscription management
+   * Users can manage subscriptions, view history, request support
+   */
+  async presentCustomerCenter(): Promise<void> {
+    try {
+      console.log('👤 Presenting Customer Center...')
+      await RevenueCatUI.presentCustomerCenter()
+      console.log('👤 Customer Center closed')
+    } catch (error) {
+      console.error('❌ Customer Center error:', error)
+      throw error
+    }
+  }
+
+  // ============================================
+  // USER ATTRIBUTES
+  // ============================================
+
+  /**
+   * Set user attributes for analytics
+   */
+  async setUserAttributes(attributes: {
+    email?: string
+    displayName?: string
+    phoneNumber?: string
+    [key: string]: string | undefined
+  }): Promise<void> {
+    try {
+      if (attributes.email) Purchases.setEmail(attributes.email)
+      if (attributes.displayName) Purchases.setDisplayName(attributes.displayName)
+      if (attributes.phoneNumber) Purchases.setPhoneNumber(attributes.phoneNumber)
+
+      const customAttributes: Record<string, string> = {}
+      for (const [key, value] of Object.entries(attributes)) {
+        if (!['email', 'displayName', 'phoneNumber'].includes(key) && value) {
+          customAttributes[key] = value
+        }
+      }
+
+      if (Object.keys(customAttributes).length > 0) {
+        await Purchases.setAttributes(customAttributes)
+      }
+
+      console.log('✅ User attributes set')
+    } catch (error) {
+      console.error('❌ Error setting attributes:', error)
+    }
+  }
+
+  /**
+   * Sync purchases with stores
+   */
+  async syncPurchases(): Promise<CustomerInfo | null> {
+    try {
+      const customerInfo = await Purchases.syncPurchases()
+      console.log('✅ Purchases synced')
+      return customerInfo
+    } catch (error) {
+      console.error('❌ Error syncing purchases:', error)
       return null
     }
   }
 
   /**
-   * Set custom user attributes for analytics
+   * Get credit amount for a product
    */
-  async setAttributes(attributes: Record<string, string | null>): Promise<void> {
-    try {
-      await Purchases.setAttributes(attributes)
-      console.log('Attributes set:', attributes)
-    } catch (error) {
-      console.error('Error setting attributes:', error)
-    }
+  getCreditsForProduct(productId: string): number {
+    return CREDIT_AMOUNTS[productId] || 0
   }
 
   /**
-   * Logout user from RevenueCat
+   * Check if SDK is initialized
    */
-  async logout(): Promise<void> {
-    try {
-      await Purchases.logOut()
-      console.log('User logged out from RevenueCat')
-    } catch (error) {
-      console.error('Error logging out:', error)
-    }
+  isInitialized(): boolean {
+    return this.initialized
   }
 
   /**
-   * Login user to RevenueCat with app user ID
+   * Get current user ID
    */
-  async login(userId: string): Promise<void> {
-    try {
-      await Purchases.logIn(userId)
-      console.log('User logged in to RevenueCat:', userId)
-    } catch (error) {
-      console.error('Error logging in:', error)
-      throw error
-    }
+  getCurrentUserId(): string | null {
+    return this.currentUserId
   }
 }
+
+// Export PAYWALL_RESULT for use in components
+export { PAYWALL_RESULT }
 
 export default new RevenueCatService()

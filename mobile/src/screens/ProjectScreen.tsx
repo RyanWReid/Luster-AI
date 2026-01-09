@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   Alert,
   TextInput,
   Share,
+  Easing,
 } from 'react-native'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -175,17 +176,68 @@ export default function ProjectScreen() {
   const [selectedPhotos, setSelectedPhotos] = useState<string[]>([])
   const [showSelectionFooter, setShowSelectionFooter] = useState(false)
 
-  // Simple fade animation
+  // Staggered entrance animations
   const fadeAnim = useRef(new Animated.Value(0)).current
+  const headerAnim = useRef(new Animated.Value(0)).current
+  const titleAnim = useRef(new Animated.Value(0)).current
+  const gridAnim = useRef(new Animated.Value(0)).current
+  const blobAnim = useRef(new Animated.Value(0)).current
+
   // Selection footer slide animation
   const selectionSlideAnim = useRef(new Animated.Value(300)).current
 
-  React.useEffect(() => {
+  useEffect(() => {
+    // Staggered entrance
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 300,
       useNativeDriver: true,
     }).start()
+
+    setTimeout(() => {
+      Animated.spring(headerAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 50,
+        useNativeDriver: true,
+      }).start()
+    }, 50)
+
+    setTimeout(() => {
+      Animated.spring(titleAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 50,
+        useNativeDriver: true,
+      }).start()
+    }, 150)
+
+    setTimeout(() => {
+      Animated.spring(gridAnim, {
+        toValue: 1,
+        friction: 8,
+        tension: 40,
+        useNativeDriver: true,
+      }).start()
+    }, 250)
+
+    // Blob animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(blobAnim, {
+          toValue: 1,
+          duration: 10000,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(blobAnim, {
+          toValue: 0,
+          duration: 10000,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ])
+    ).start()
   }, [])
 
   // Animate selection footer in/out
@@ -461,7 +513,13 @@ export default function ProjectScreen() {
           style={[
             styles.header,
             {
-              opacity: fadeAnim,
+              opacity: headerAnim,
+              transform: [{
+                translateY: headerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 0],
+                }),
+              }],
             },
           ]}
         >
@@ -471,9 +529,23 @@ export default function ProjectScreen() {
             </BlurView>
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle} numberOfLines={1}>
+          <Animated.Text
+            style={[
+              styles.headerTitle,
+              {
+                opacity: titleAnim,
+                transform: [{
+                  scale: titleAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.9, 1],
+                  }),
+                }],
+              },
+            ]}
+            numberOfLines={1}
+          >
             {propertyData.address}
-          </Text>
+          </Animated.Text>
 
           <TouchableOpacity onPress={handleMenu} style={styles.headerButton}>
             <BlurView intensity={60} tint="light" style={styles.headerButtonBlur}>
@@ -492,7 +564,13 @@ export default function ProjectScreen() {
             style={[
               styles.section,
               {
-                opacity: fadeAnim,
+                opacity: gridAnim,
+                transform: [{
+                  translateY: gridAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [20, 0],
+                  }),
+                }],
               },
             ]}
           >

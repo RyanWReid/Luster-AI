@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   Image,
   Dimensions,
+  Easing,
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -18,6 +19,7 @@ import Svg, { Path, Circle, Rect } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { useAuth } from '../context/AuthContext'
 import { usePhotos } from '../context/PhotoContext'
+import revenueCatService from '../services/revenueCatService'
 
 const { width: screenWidth } = Dimensions.get('window')
 
@@ -276,6 +278,39 @@ export default function SettingsScreen() {
   const { creditBalance } = usePhotos()
   const [notifications, setNotifications] = useState(true)
 
+  // Staggered entrance animations
+  const headerAnim = useRef(new Animated.Value(0)).current
+  const profileAnim = useRef(new Animated.Value(0)).current
+  const creditsAnim = useRef(new Animated.Value(0)).current
+  const section1Anim = useRef(new Animated.Value(0)).current
+  const section2Anim = useRef(new Animated.Value(0)).current
+  const section3Anim = useRef(new Animated.Value(0)).current
+  const signOutAnim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    // Staggered entrance
+    const animations = [
+      { anim: headerAnim, delay: 0 },
+      { anim: profileAnim, delay: 80 },
+      { anim: creditsAnim, delay: 160 },
+      { anim: section1Anim, delay: 240 },
+      { anim: section2Anim, delay: 320 },
+      { anim: section3Anim, delay: 400 },
+      { anim: signOutAnim, delay: 480 },
+    ]
+
+    animations.forEach(({ anim, delay }) => {
+      setTimeout(() => {
+        Animated.spring(anim, {
+          toValue: 1,
+          friction: 8,
+          tension: 50,
+          useNativeDriver: true,
+        }).start()
+      }, delay)
+    })
+  }, [])
+
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
@@ -310,7 +345,20 @@ export default function SettingsScreen() {
 
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
-        <View style={styles.header}>
+        <Animated.View
+          style={[
+            styles.header,
+            {
+              opacity: headerAnim,
+              transform: [{
+                translateY: headerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-20, 0],
+                }),
+              }],
+            },
+          ]}
+        >
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={styles.backButton}
@@ -320,7 +368,7 @@ export default function SettingsScreen() {
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Settings</Text>
           <View style={styles.headerSpacer} />
-        </View>
+        </Animated.View>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -328,125 +376,185 @@ export default function SettingsScreen() {
           contentContainerStyle={styles.contentContainer}
         >
           {/* Profile Section */}
-          <TouchableOpacity
-            style={styles.profileCard}
-            activeOpacity={0.8}
-            onPress={() => Alert.alert('Edit Profile', 'Profile editing coming soon!')}
+          <Animated.View
+            style={{
+              opacity: profileAnim,
+              transform: [
+                { translateY: profileAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
+                { scale: profileAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) },
+              ],
+            }}
           >
-            <View style={styles.profileAvatar}>
-              <Text style={styles.profileInitials}>{getInitials()}</Text>
-            </View>
-            <View style={styles.profileInfo}>
-              <Text style={styles.profileName}>
-                {user?.email?.split('@')[0] || 'User'}
-              </Text>
-              <Text style={styles.profileEmail}>{user?.email || 'Not signed in'}</Text>
-            </View>
-            <ChevronRightIcon color="#C7C7CC" />
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileCard}
+              activeOpacity={0.8}
+              onPress={() => Alert.alert('Edit Profile', 'Profile editing coming soon!')}
+            >
+              <View style={styles.profileAvatar}>
+                <Text style={styles.profileInitials}>{getInitials()}</Text>
+              </View>
+              <View style={styles.profileInfo}>
+                <Text style={styles.profileName}>
+                  {user?.email?.split('@')[0] || 'User'}
+                </Text>
+                <Text style={styles.profileEmail}>{user?.email || 'Not signed in'}</Text>
+              </View>
+              <ChevronRightIcon color="#C7C7CC" />
+            </TouchableOpacity>
+          </Animated.View>
 
           {/* Credits Card */}
-          <TouchableOpacity
-            style={styles.creditsCard}
-            activeOpacity={0.9}
-            onPress={() => navigation.navigate('Credits' as never)}
+          <Animated.View
+            style={{
+              opacity: creditsAnim,
+              transform: [
+                { translateY: creditsAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
+                { scale: creditsAnim.interpolate({ inputRange: [0, 1], outputRange: [0.95, 1] }) },
+              ],
+            }}
           >
-            <LinearGradient
-              colors={['#1C1C1E', '#2C2C2E']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.creditsGradient}
+            <TouchableOpacity
+              style={styles.creditsCard}
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate('Credits' as never)}
             >
-              <View style={styles.creditsContent}>
-                <View style={styles.creditsLeft}>
-                  <Text style={styles.creditsLabel}>Available Credits</Text>
-                  <View style={styles.creditsValueRow}>
-                    <Text style={styles.creditsValue}>{creditBalance ?? 0}</Text>
-                    <View style={styles.creditsBadge}>
-                      <SparkleIcon color="#FFF" />
+              <LinearGradient
+                colors={['#1C1C1E', '#2C2C2E']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.creditsGradient}
+              >
+                <View style={styles.creditsContent}>
+                  <View style={styles.creditsLeft}>
+                    <Text style={styles.creditsLabel}>Available Credits</Text>
+                    <View style={styles.creditsValueRow}>
+                      <Text style={styles.creditsValue}>{creditBalance ?? 0}</Text>
+                      <View style={styles.creditsBadge}>
+                        <SparkleIcon color="#FFF" />
+                      </View>
                     </View>
+                    <Text style={styles.creditsSubtext}>
+                      {creditBalance === 0 ? 'Get credits to enhance photos' : 'Ready to enhance'}
+                    </Text>
                   </View>
-                  <Text style={styles.creditsSubtext}>
-                    {creditBalance === 0 ? 'Get credits to enhance photos' : 'Ready to enhance'}
-                  </Text>
+                  <TouchableOpacity
+                    style={styles.buyButton}
+                    onPress={() => navigation.navigate('Credits' as never)}
+                  >
+                    <Text style={styles.buyButtonText}>Buy More</Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={styles.buyButton}
-                  onPress={() => navigation.navigate('Credits' as never)}
-                >
-                  <Text style={styles.buyButtonText}>Buy More</Text>
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
-          </TouchableOpacity>
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
 
           {/* Preferences */}
-          <Section title="PREFERENCES">
-            <SettingRow
-              icon={<BellIcon />}
-              title="Push Notifications"
-              subtitle="Get notified when photos are ready"
-              toggle
-              toggleValue={notifications}
-              onToggleChange={setNotifications}
-              isLast
-            />
-          </Section>
+          <Animated.View
+            style={{
+              opacity: section1Anim,
+              transform: [{ translateY: section1Anim.interpolate({ inputRange: [0, 1], outputRange: [15, 0] }) }],
+            }}
+          >
+            <Section title="PREFERENCES">
+              <SettingRow
+                icon={<BellIcon />}
+                title="Push Notifications"
+                subtitle="Get notified when photos are ready"
+                toggle
+                toggleValue={notifications}
+                onToggleChange={setNotifications}
+                isLast
+              />
+            </Section>
+          </Animated.View>
 
           {/* Account */}
-          <Section title="ACCOUNT">
-            <SettingRow
-              icon={<CreditCardIcon />}
-              title="Subscription"
-              value="Free"
-              onPress={() => navigation.navigate('Credits' as never)}
-            />
-            <SettingRow
-              icon={<ShieldIcon />}
-              title="Privacy & Security"
-              onPress={() => navigation.navigate('PrivacySecurity' as never)}
-            />
-            <SettingRow
-              icon={<UserIcon />}
-              title="Account Settings"
-              onPress={() => navigation.navigate('AccountSettings' as never)}
-              isLast
-            />
-          </Section>
+          <Animated.View
+            style={{
+              opacity: section2Anim,
+              transform: [{ translateY: section2Anim.interpolate({ inputRange: [0, 1], outputRange: [15, 0] }) }],
+            }}
+          >
+            <Section title="ACCOUNT">
+              <SettingRow
+                icon={<CreditCardIcon />}
+                title="Buy Credits"
+                subtitle="Enhance more photos"
+                onPress={() => navigation.navigate('Credits' as never)}
+              />
+              <SettingRow
+                icon={<SparkleIcon />}
+                title="Manage Subscription"
+                subtitle="View and manage your plan"
+                onPress={async () => {
+                  try {
+                    await revenueCatService.presentCustomerCenter()
+                  } catch (error) {
+                    Alert.alert('Error', 'Unable to open subscription management. Please try again.')
+                  }
+                }}
+              />
+              <SettingRow
+                icon={<ShieldIcon />}
+                title="Privacy & Security"
+                onPress={() => navigation.navigate('PrivacySecurity' as never)}
+              />
+              <SettingRow
+                icon={<UserIcon />}
+                title="Account Settings"
+                onPress={() => navigation.navigate('AccountSettings' as never)}
+                isLast
+              />
+            </Section>
+          </Animated.View>
 
           {/* Support */}
-          <Section title="SUPPORT">
-            <SettingRow
-              icon={<HelpIcon />}
-              title="Help Center"
-              showExternal
-              onPress={() => Alert.alert('Help Center', 'Opening help center...')}
-            />
-            <SettingRow
-              icon={<InfoIcon />}
-              title="About Luster"
-              value="v1.0.0"
-              onPress={() =>
-                Alert.alert(
-                  'Luster AI',
-                  'Version 1.0.0\n\nProfessional photo enhancement for real estate.\n\nMade with ❤️ for real estate professionals.'
-                )
-              }
-              isLast
-            />
-          </Section>
+          <Animated.View
+            style={{
+              opacity: section3Anim,
+              transform: [{ translateY: section3Anim.interpolate({ inputRange: [0, 1], outputRange: [15, 0] }) }],
+            }}
+          >
+            <Section title="SUPPORT">
+              <SettingRow
+                icon={<HelpIcon />}
+                title="Help Center"
+                showExternal
+                onPress={() => Alert.alert('Help Center', 'Opening help center...')}
+              />
+              <SettingRow
+                icon={<InfoIcon />}
+                title="About Luster"
+                value="v1.0.0"
+                onPress={() =>
+                  Alert.alert(
+                    'Luster AI',
+                    'Version 1.0.0\n\nProfessional photo enhancement for real estate.\n\nMade with ❤️ for real estate professionals.'
+                  )
+                }
+                isLast
+              />
+            </Section>
+          </Animated.View>
 
           {/* Sign Out */}
-          <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleSignOut}
-            activeOpacity={0.7}
+          <Animated.View
+            style={{
+              opacity: signOutAnim,
+              transform: [{ translateY: signOutAnim.interpolate({ inputRange: [0, 1], outputRange: [15, 0] }) }],
+            }}
           >
-            <View style={styles.signOutContent}>
-              <LogOutIcon />
-              <Text style={styles.signOutText}>Sign Out</Text>
-            </View>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.signOutButton}
+              onPress={handleSignOut}
+              activeOpacity={0.7}
+            >
+              <View style={styles.signOutContent}>
+                <LogOutIcon />
+                <Text style={styles.signOutText}>Sign Out</Text>
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
 
           {/* Footer */}
           <View style={styles.footer}>

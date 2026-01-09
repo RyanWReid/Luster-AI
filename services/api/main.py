@@ -1,10 +1,14 @@
 import base64
 import json
 import os
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+
+# Add packages directory to path for shared imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "packages"))
 
 import sentry_sdk
 from dotenv import load_dotenv
@@ -32,6 +36,9 @@ from logger import LoggingMiddleware, logger
 from rate_limiter import RATE_LIMITS, limiter, rate_limit_exceeded_handler
 from revenue_cat import router as revenuecat_router
 from schemas import validate_uuid
+
+# Import structured prompt builder
+from shared.prompt_builder import PromptBuilder, get_structured_prompt
 
 # Import R2 client for presigned URLs
 try:
@@ -1065,16 +1072,13 @@ async def mobile_enhance(
     credit.balance -= credit_cost
     db.flush()
 
-    # Create job with proper prompt
-    style_prompts = {
-        "luster": "Luster AI signature style - luxury editorial real estate photography with dramatic lighting",
-        "flambient": "Bright, airy interior with crisp whites and flambient lighting technique",
-    }
+    # Create job with structured prompt (GPT-Image best practices)
+    structured_prompt = get_structured_prompt(style=style)
 
     job = Job(
         asset_id=asset.id,
         user_id=user.id,
-        prompt=style_prompts.get(style, style_prompts["luster"]),
+        prompt=structured_prompt,
         status=JobStatus.queued,
         credits_used=credit_cost,
     )
@@ -1236,16 +1240,13 @@ async def mobile_enhance_base64(
     credit.balance -= body.credit_cost
     db.flush()
 
-    # Create job
-    style_prompts = {
-        "luster": "Luster AI signature style - luxury editorial real estate photography with dramatic lighting",
-        "flambient": "Bright, airy interior with crisp whites and flambient lighting technique",
-    }
+    # Create job with structured prompt (GPT-Image best practices)
+    structured_prompt = get_structured_prompt(style=body.style)
 
     job = Job(
         asset_id=asset.id,
         user_id=user.id,
-        prompt=style_prompts.get(body.style, style_prompts["luster"]),
+        prompt=structured_prompt,
         status=JobStatus.queued,
         credits_used=body.credit_cost,
     )

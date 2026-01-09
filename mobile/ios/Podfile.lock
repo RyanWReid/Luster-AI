@@ -115,8 +115,11 @@ PODS:
   - libwebp/sharpyuv (1.5.0)
   - libwebp/webp (1.5.0):
     - libwebp/sharpyuv
-  - PurchasesHybridCommon (17.10.0):
-    - RevenueCat (= 5.43.0)
+  - PurchasesHybridCommon (17.26.0):
+    - RevenueCat (= 5.52.0)
+  - PurchasesHybridCommonUI (17.26.0):
+    - PurchasesHybridCommon (= 17.26.0)
+    - RevenueCatUI (= 5.52.0)
   - RCTDeprecation (0.81.4)
   - RCTRequired (0.81.4)
   - RCTTypeSafety (0.81.4):
@@ -1837,7 +1840,9 @@ PODS:
     - React-utils (= 0.81.4)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.81.4)
-  - RevenueCat (5.43.0)
+  - RevenueCat (5.52.0)
+  - RevenueCatUI (5.52.0):
+    - RevenueCat (= 5.52.0)
   - RNCAsyncStorage (2.2.0):
     - hermes-engine
     - RCTRequired
@@ -1926,8 +1931,11 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - RNPurchases (9.5.4):
-    - PurchasesHybridCommon (= 17.10.0)
+  - RNPaywalls (9.6.13):
+    - PurchasesHybridCommonUI (= 17.26.0)
+    - React-Core
+  - RNPurchases (9.6.13):
+    - PurchasesHybridCommon (= 17.26.0)
     - React-Core
   - RNReactNativeHapticFeedback (2.3.3):
     - hermes-engine
@@ -2188,9 +2196,9 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - SDWebImage (5.21.1):
-    - SDWebImage/Core (= 5.21.1)
-  - SDWebImage/Core (5.21.1)
+  - SDWebImage (5.21.5):
+    - SDWebImage/Core (= 5.21.5)
+  - SDWebImage/Core (5.21.5)
   - SDWebImageAVIFCoder (0.11.1):
     - libavif/core (>= 0.11.0)
     - SDWebImage (~> 5.10)
@@ -2301,6 +2309,7 @@ DEPENDENCIES:
   - "RNCClipboard (from `../node_modules/@react-native-clipboard/clipboard`)"
   - "RNCMaskedView (from `../node_modules/@react-native-masked-view/masked-view`)"
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
+  - RNPaywalls (from `../node_modules/react-native-purchases-ui`)
   - RNPurchases (from `../node_modules/react-native-purchases`)
   - RNReactNativeHapticFeedback (from `../node_modules/react-native-haptic-feedback`)
   - RNReanimated (from `../node_modules/react-native-reanimated`)
@@ -2315,7 +2324,9 @@ SPEC REPOS:
     - libdav1d
     - libwebp
     - PurchasesHybridCommon
+    - PurchasesHybridCommonUI
     - RevenueCat
+    - RevenueCatUI
     - SDWebImage
     - SDWebImageAVIFCoder
     - SDWebImageSVGCoder
@@ -2510,6 +2521,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-masked-view/masked-view"
   RNGestureHandler:
     :path: "../node_modules/react-native-gesture-handler"
+  RNPaywalls:
+    :path: "../node_modules/react-native-purchases-ui"
   RNPurchases:
     :path: "../node_modules/react-native-purchases"
   RNReactNativeHapticFeedback:
@@ -2552,7 +2565,8 @@ SPEC CHECKSUMS:
   libavif: 84bbb62fb232c3018d6f1bab79beea87e35de7b7
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
-  PurchasesHybridCommon: b7b4eafb55fbaaac19b4c36d4082657a3f0d8490
+  PurchasesHybridCommon: 93399cb2ba29164dbab79d6398e79f7723b41653
+  PurchasesHybridCommonUI: ebbb750fc4592418a15a16c88061dd8734a509db
   RCTDeprecation: 7487d6dda857ccd4cb3dd6ecfccdc3170e85dcbc
   RCTRequired: 54128b7df8be566881d48c7234724a78cb9b6157
   RCTTypeSafety: d2b07797a79e45d7b19e1cd2f53c79ab419fe217
@@ -2619,18 +2633,20 @@ SPEC CHECKSUMS:
   ReactCodegen: a15ad48730e9fb2a51a4c9f61fe1ed253dfcf10f
   ReactCommon: 149b6c05126f2e99f2ed0d3c63539369546f8cae
   ReactNativeDependencies: ed6d1e64802b150399f04f1d5728ec16b437251e
-  RevenueCat: a51003d4cb33820cc504cf177c627832b462a98e
+  RevenueCat: 946aceaf97c1eee083dd7fad65a0e0d0c64c837e
+  RevenueCatUI: 9e4a7e2ccff6b4fc9becd72b7efc9476c458e936
   RNCAsyncStorage: 3a4f5e2777dae1688b781a487923a08569e27fe4
   RNCClipboard: 88d7eeb555d1183915f0885bdbc5c97eb6f7f3ba
   RNCMaskedView: d2578d41c59b936db122b2798ba37e4722d21035
   RNGestureHandler: 2914750df066d89bf9d8f48a10ad5f0051108ac3
-  RNPurchases: 2569675abdc1dbc739f2eec0fa564a112cf860de
+  RNPaywalls: 3d5665fe648b73c4d7d10d9d42eba56aaf840c37
+  RNPurchases: 049c027cded681054a37b4aea87d904626174c76
   RNReactNativeHapticFeedback: d7bc1bcfe68bb139c9919ea81d11d7c6e866e870
   RNReanimated: 3895a29fdf77bbe2a627e1ed599a5e5d1df76c29
   RNScreens: d8d6f1792f6e7ac12b0190d33d8d390efc0c1845
   RNSVG: 31d6639663c249b7d5abc9728dde2041eb2a3c34
   RNWorklets: 76fce72926e28e304afb44f0da23b2d24f2c1fa0
-  SDWebImage: f29024626962457f3470184232766516dee8dfea
+  SDWebImage: e9c98383c7572d713c1a0d7dd2783b10599b9838
   SDWebImageAVIFCoder: afe194a084e851f70228e4be35ef651df0fc5c57
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SDWebImageWebPCoder: e38c0a70396191361d60c092933e22c20d5b1380
