@@ -19,6 +19,7 @@ import { usePhotos } from '../context/PhotoContext'
 import { useListings } from '../context/ListingsContext'
 import { useAuth } from '../context/AuthContext'
 import hapticFeedback from '../utils/haptics'
+import { api } from '../lib/api'
 
 // Back icon
 const BackIcon = () => (
@@ -191,7 +192,7 @@ export default function ConfirmationScreen() {
     navigation.navigate('NewListing' as never)
   }
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     // Check credits BEFORE starting
     if (!hasEnoughCredits) {
       hapticFeedback.notification('warning')
@@ -211,6 +212,27 @@ export default function ConfirmationScreen() {
       )
       return
     }
+
+    // Check for active jobs BEFORE starting a new one
+    setIsChecking(true)
+    try {
+      const activeJobsResponse = await api.get<{ has_active: boolean; active_count: number }>('/jobs/active')
+
+      if (activeJobsResponse.has_active) {
+        setIsChecking(false)
+        hapticFeedback.notification('warning')
+        Alert.alert(
+          'Enhancement in Progress',
+          'You already have an enhancement running. Please wait for it to complete before starting a new one.',
+          [{ text: 'OK', style: 'default' }]
+        )
+        return
+      }
+    } catch (error) {
+      console.error('Error checking active jobs:', error)
+      // Continue anyway if check fails - the backend will handle it
+    }
+    setIsChecking(false)
 
     hapticFeedback.medium()
 
@@ -474,14 +496,19 @@ export default function ConfirmationScreen() {
             onPress={handleConfirm}
             activeOpacity={0.8}
             style={styles.confirmButtonTouchable}
+            disabled={isChecking}
           >
             <LinearGradient
-              colors={['#D4AF37', '#B8860B']}
+              colors={isChecking ? ['#9CA3AF', '#6B7280'] : ['#D4AF37', '#B8860B']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={styles.confirmButton}
             >
-              <Text style={styles.confirmButtonText}>Start Enhancement</Text>
+              {isChecking ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.confirmButtonText}>Start Enhancement</Text>
+              )}
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>

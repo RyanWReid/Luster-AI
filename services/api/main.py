@@ -699,6 +699,38 @@ def get_job(
     return result
 
 
+@app.get("/jobs/active")
+def get_active_jobs(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Check if user has any active (queued or processing) jobs.
+
+    Returns:
+        has_active: boolean indicating if there are active jobs
+        active_count: number of active jobs
+        jobs: list of active job IDs and statuses
+    """
+    active_jobs = (
+        db.query(Job)
+        .filter(
+            Job.user_id == user.id,
+            Job.status.in_([JobStatus.queued, JobStatus.processing])
+        )
+        .all()
+    )
+
+    return {
+        "has_active": len(active_jobs) > 0,
+        "active_count": len(active_jobs),
+        "jobs": [
+            {"id": str(job.id), "status": job.status.value}
+            for job in active_jobs
+        ]
+    }
+
+
 @app.post("/jobs/{job_id}/refund")
 def refund_job_credits(
     job_id: str,
