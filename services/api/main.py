@@ -1,14 +1,9 @@
 import base64
 import json
 import os
-import sys
 import uuid
 from datetime import datetime
-from pathlib import Path
 from typing import Optional
-
-# Add packages directory to path for shared imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "packages"))
 
 import sentry_sdk
 from dotenv import load_dotenv
@@ -37,17 +32,8 @@ from rate_limiter import RATE_LIMITS, limiter, rate_limit_exceeded_handler
 from revenue_cat import router as revenuecat_router
 from schemas import validate_uuid
 
-# Import structured prompt builder (optional - may not be available in container)
-try:
-    from shared.prompt_builder import PromptBuilder, get_structured_prompt
-    STRUCTURED_PROMPTS_ENABLED = True
-    logger.info("Structured prompt builder loaded successfully")
-except ImportError:
-    STRUCTURED_PROMPTS_ENABLED = False
-    logger.warning("Structured prompt builder not available, using legacy prompts")
-
-# Legacy fallback prompts (used when structured prompts unavailable)
-LEGACY_STYLE_PROMPTS = {
+# Style prompts for image enhancement
+style_prompts = {
     "luster": """Transform this interior photo into a photorealistic, luxury-grade real estate image.
 Balance realism with natural texture and authentic light flow. Output must be MLS-ready.
 Preserve all architectural features, furniture positions, and material textures.
@@ -66,12 +52,6 @@ No furniture additions or staging. All screens OFF. No HDR artifacts.""",
     "sky_replacement": "Enhance this real estate photo with a beautiful clear blue sky while preserving all architectural details.",
     "lawn_cleanup": "Clean up and enhance the landscaping, making grass greener and more manicured while keeping all hardscaping authentic.",
 }
-
-def get_prompt_for_style(style: str) -> str:
-    """Get prompt for style, using structured prompts if available, otherwise legacy."""
-    if STRUCTURED_PROMPTS_ENABLED:
-        return get_structured_prompt(style=style)
-    return LEGACY_STYLE_PROMPTS.get(style, LEGACY_STYLE_PROMPTS["luster"])
 
 # Import R2 client for presigned URLs
 try:
@@ -1105,13 +1085,13 @@ async def mobile_enhance(
     credit.balance -= credit_cost
     db.flush()
 
-    # Create job with structured prompt (GPT-Image best practices)
-    structured_prompt = get_prompt_for_style(style=style)
+    # Create job with style prompt
+    prompt = style_prompts.get(style, style_prompts["luster"])
 
     job = Job(
         asset_id=asset.id,
         user_id=user.id,
-        prompt=structured_prompt,
+        prompt=prompt,
         status=JobStatus.queued,
         credits_used=credit_cost,
     )
@@ -1273,13 +1253,13 @@ async def mobile_enhance_base64(
     credit.balance -= body.credit_cost
     db.flush()
 
-    # Create job with structured prompt (GPT-Image best practices)
-    structured_prompt = get_prompt_for_style(style=body.style)
+    # Create job with style prompt
+    prompt = style_prompts.get(body.style, style_prompts["luster"])
 
     job = Job(
         asset_id=asset.id,
         user_id=user.id,
-        prompt=structured_prompt,
+        prompt=prompt,
         status=JobStatus.queued,
         credits_used=body.credit_cost,
     )
