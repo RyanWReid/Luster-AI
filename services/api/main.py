@@ -37,8 +37,41 @@ from rate_limiter import RATE_LIMITS, limiter, rate_limit_exceeded_handler
 from revenue_cat import router as revenuecat_router
 from schemas import validate_uuid
 
-# Import structured prompt builder
-from shared.prompt_builder import PromptBuilder, get_structured_prompt
+# Import structured prompt builder (optional - may not be available in container)
+try:
+    from shared.prompt_builder import PromptBuilder, get_structured_prompt
+    STRUCTURED_PROMPTS_ENABLED = True
+    logger.info("Structured prompt builder loaded successfully")
+except ImportError:
+    STRUCTURED_PROMPTS_ENABLED = False
+    logger.warning("Structured prompt builder not available, using legacy prompts")
+
+# Legacy fallback prompts (used when structured prompts unavailable)
+LEGACY_STYLE_PROMPTS = {
+    "luster": """Transform this interior photo into a photorealistic, luxury-grade real estate image.
+Balance realism with natural texture and authentic light flow. Output must be MLS-ready.
+Preserve all architectural features, furniture positions, and material textures.
+Remove clutter (cables, papers, toiletries) but never add furniture or staging items.
+All screens must be OFF. No HDR halos or artificial lighting effects.""",
+    "flambient": """Transform this interior photo into a bright, airy real estate image with crisp neutral whites.
+Use professional flambient lighting technique for spacious, inviting feel.
+White balance ~5200K daylight. Lift ceilings and walls +0.2-0.3 EV for airy feel.
+Preserve wood warmth without color cast onto whites. Remove clutter only.
+No furniture additions. All screens OFF. No HDR artifacts.""",
+    "warm": """Transform this interior photo into a warm, inviting real estate image with cozy golden tones.
+Color temperature 4500-5000K with subtle golden undertones. Not orange, just cozy.
+Preserve wood warmth in floors and cabinets. Remove clutter only.
+No furniture additions or staging. All screens OFF. No HDR artifacts.""",
+    "dusk": "Transform this real estate photo with warm dusk lighting, golden hour ambiance while maintaining architectural accuracy.",
+    "sky_replacement": "Enhance this real estate photo with a beautiful clear blue sky while preserving all architectural details.",
+    "lawn_cleanup": "Clean up and enhance the landscaping, making grass greener and more manicured while keeping all hardscaping authentic.",
+}
+
+def get_prompt_for_style(style: str) -> str:
+    """Get prompt for style, using structured prompts if available, otherwise legacy."""
+    if STRUCTURED_PROMPTS_ENABLED:
+        return get_structured_prompt(style=style)
+    return LEGACY_STYLE_PROMPTS.get(style, LEGACY_STYLE_PROMPTS["luster"])
 
 # Import R2 client for presigned URLs
 try:
@@ -1073,7 +1106,7 @@ async def mobile_enhance(
     db.flush()
 
     # Create job with structured prompt (GPT-Image best practices)
-    structured_prompt = get_structured_prompt(style=style)
+    structured_prompt = get_prompt_for_style(style=style)
 
     job = Job(
         asset_id=asset.id,
@@ -1241,7 +1274,7 @@ async def mobile_enhance_base64(
     db.flush()
 
     # Create job with structured prompt (GPT-Image best practices)
-    structured_prompt = get_structured_prompt(style=body.style)
+    structured_prompt = get_prompt_for_style(style=body.style)
 
     job = Job(
         asset_id=asset.id,
