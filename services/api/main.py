@@ -3,6 +3,7 @@ import json
 import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 import sentry_sdk
