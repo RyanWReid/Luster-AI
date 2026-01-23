@@ -262,6 +262,119 @@ def get_recent_jobs(
     }
 
 
+@router.post("/jobs/{job_id}/force-fail")
+def force_fail_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Force a stuck job to failed status.
+    Use this to clear jobs that are stuck in queued/processing state.
+
+    Also refunds the credits to the user.
+    """
+    from uuid import UUID
+
+    try:
+        job_uuid = UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID format")
+
+    job = db.query(Job).filter(Job.id == job_uuid).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.status not in [JobStatus.queued, JobStatus.processing]:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job is already {job.status.value}, cannot force-fail"
+        )
+
+    old_status = job.status.value
+    job.status = JobStatus.failed
+    job.completed_at = datetime.utcnow()
+    job.error_message = f"Force-failed by admin (was {old_status})"
+
+    # Refund credits
+    from database import Credit
+    credit = db.query(Credit).filter(Credit.user_id == job.user_id).first()
+    if credit and job.credits_used:
+        credit.balance += job.credits_used
+
+    # Add job event
+    event = JobEvent(
+        job_id=job.id,
+        event_type="force_failed",
+        details=f"Admin force-failed job from {old_status} status. Credits refunded: {job.credits_used}",
+    )
+    db.add(event)
+
+    db.commit()
+
+    return {
+        "success": True,
+        "job_id": str(job.id),
+        "old_status": old_status,
+        "new_status": "failed",
+        "credits_refunded": job.credits_used,
+    }
+
+
+@router.post("/jobs/clear-stuck")
+def clear_stuck_jobs(
+    hours: int = 1,
+    db: Session = Depends(get_db),
+):
+    """
+    Force-fail all jobs stuck in queued/processing for more than X hours.
+    Default: 1 hour.
+
+    Returns list of cleared jobs.
+    """
+    from database import Credit
+
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+
+    stuck_jobs = db.query(Job).filter(
+        Job.status.in_([JobStatus.queued, JobStatus.processing]),
+        Job.created_at < cutoff
+    ).all()
+
+    cleared = []
+    for job in stuck_jobs:
+        old_status = job.status.value
+        job.status = JobStatus.failed
+        job.completed_at = datetime.utcnow()
+        job.error_message = f"Auto-cleared: stuck in {old_status} for over {hours} hour(s)"
+
+        # Refund credits
+        credit = db.query(Credit).filter(Credit.user_id == job.user_id).first()
+        if credit and job.credits_used:
+            credit.balance += job.credits_used
+
+        # Add job event
+        event = JobEvent(
+            job_id=job.id,
+            event_type="auto_cleared",
+            details=f"Auto-cleared from {old_status} status after {hours}h. Credits refunded: {job.credits_used}",
+        )
+        db.add(event)
+
+        cleared.append({
+            "job_id": str(job.id),
+            "old_status": old_status,
+            "credits_refunded": job.credits_used,
+        })
+
+    db.commit()
+
+    return {
+        "success": True,
+        "cleared_count": len(cleared),
+        "cleared_jobs": cleared,
+    }
+
+
 # ============================================================================
 # System Metrics
 # ============================================================================
