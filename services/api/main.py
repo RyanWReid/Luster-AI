@@ -178,7 +178,7 @@ class Base64ImageRequest(BaseModel):
     style: str = "luster"
     project_name: Optional[str] = None
     shoot_id: Optional[str] = None
-    credit_cost: int = 1  # Credit cost per photo (flexible pricing)
+    credit_cost: int = 2  # Credit cost per photo
 
     @field_validator("image")
     @classmethod
@@ -969,7 +969,7 @@ async def mobile_enhance(
     style: str = Form("luster"),
     shoot_id: Optional[str] = Form(None),
     project_name: Optional[str] = Form(None),
-    credit_cost: int = Form(1),  # Credit cost per photo (flexible pricing)
+    credit_cost: int = Form(2),  # Credit cost per photo
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):

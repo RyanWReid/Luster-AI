@@ -121,9 +121,8 @@ export default function ConfirmationScreen() {
   const backendStyle = (route.params as any)?.backendStyle || 'flambient'
   const photoCount = selectedPhotos.length || 1
 
-  // Credit calculation - currently 1 credit per photo
-  // This can be modified in the future based on style, options, etc.
-  const creditPerPhoto = 1
+  // Credit calculation - 2 credits per photo
+  const creditPerPhoto = 2
   const requiredCredits = photoCount * creditPerPhoto
   const hasEnoughCredits = credits >= requiredCredits
 
@@ -456,7 +455,7 @@ export default function ConfirmationScreen() {
                 <Text style={styles.costUnit}>Credit{requiredCredits > 1 ? 's' : ''}</Text>
               </View>
               <Text style={styles.costDetail}>
-                {photoCount} photo{photoCount > 1 ? 's' : ''} × 1 credit each
+                {photoCount} photo{photoCount > 1 ? 's' : ''} × {creditPerPhoto} credits each
               </Text>
               <View style={styles.balanceRow}>
                 <Text style={styles.balanceLabel}>Your balance:</Text>

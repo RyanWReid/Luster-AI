@@ -115,7 +115,7 @@ class Job(Base):
     status = Column(SQLEnum(JobStatus), nullable=False, default=JobStatus.queued)
     output_path = Column(String(512))
     error_message = Column(Text)
-    credits_used = Column(Integer, default=1)
+    credits_used = Column(Integer, default=2)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     started_at = Column(DateTime)

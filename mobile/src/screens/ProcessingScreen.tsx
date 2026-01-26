@@ -91,7 +91,7 @@ export default function ProcessingScreen() {
   const style = isValidStyle(rawStyle) ? rawStyle : 'luster' // Validate style with type guard
   const photos = params?.photos ?? selectedPhotos
   const photoCount = params?.photoCount ?? photos.length
-  const creditPerPhoto = params?.creditPerPhoto ?? 1 // Default to 1 credit per photo
+  const creditPerPhoto = params?.creditPerPhoto ?? 2 // Default to 2 credits per photo
 
   // State for tracking progress
   const [processedCount, setProcessedCount] = useState(0)

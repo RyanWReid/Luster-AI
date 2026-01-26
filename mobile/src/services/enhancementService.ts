@@ -278,7 +278,7 @@ class EnhancementService {
         style: params.style,
         project_name: params.projectName,
         shoot_id: params.shootId,
-        credit_cost: params.creditCost ?? 1,
+        credit_cost: params.creditCost ?? 2,
       }
       console.log('Request body prepared:', {
         imageLength: requestBody.image.length,
