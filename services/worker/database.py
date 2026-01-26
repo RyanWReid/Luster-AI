@@ -120,6 +120,10 @@ class Job(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
+    # Lease-based locking to prevent stuck jobs
+    lease_expires_at = Column(DateTime, nullable=True)  # When the worker's lease expires
+    retry_count = Column(Integer, default=0)  # Number of processing attempts
+    max_retries = Column(Integer, default=3)  # Max attempts before permanent failure
 
     asset = relationship("Asset", back_populates="jobs")
     user = relationship("User", back_populates="jobs")

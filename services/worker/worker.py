@@ -7,12 +7,17 @@ import os
 import time
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from database import SessionLocal, Job, JobEvent, Asset, Credit, JobStatus
 from processor import ImageProcessor
+
+# Lease configuration
+LEASE_DURATION_MINUTES = 15  # How long a worker holds a lease on a job
+MAX_RETRIES = 3  # Maximum retry attempts before permanent failure
 
 load_dotenv()
 
@@ -99,18 +104,35 @@ class Worker:
             print(f"Warning: Could not cleanup temp file {file_path}: {e}")
 
     def poll_jobs(self):
-        """Poll database for queued jobs"""
+        """Poll database for queued jobs or jobs with expired leases"""
         try:
             # Refresh session to see new data
             self.db.expire_all()
 
+            now = datetime.utcnow()
+
             # Use SELECT FOR UPDATE SKIP LOCKED for job queuing
+            # Find jobs that are either:
+            # 1. Queued (new jobs)
+            # 2. Processing with expired lease (stuck jobs that can be reclaimed)
             job = self.db.query(Job).filter(
-                Job.status == JobStatus.queued
+                or_(
+                    Job.status == JobStatus.queued,
+                    # Jobs with expired leases that haven't exceeded max retries
+                    (
+                        (Job.status == JobStatus.processing) &
+                        (Job.lease_expires_at != None) &
+                        (Job.lease_expires_at < now) &
+                        (Job.retry_count < Job.max_retries)
+                    )
+                )
             ).with_for_update(skip_locked=True).first()
 
             if job:
-                print(f"Found queued job: {job.id}")
+                if job.status == JobStatus.processing:
+                    print(f"Found job with expired lease: {job.id} (retry {job.retry_count + 1})")
+                else:
+                    print(f"Found queued job: {job.id}")
 
             return job
         except Exception as e:
@@ -125,15 +147,53 @@ class Worker:
     def process_job(self, job: Job):
         """Process a single job"""
         print(f"\n=== PROCESSING JOB {job.id} ===")
-        
+
         try:
-            # Update job status to processing
+            now = datetime.utcnow()
+            is_retry = job.status == JobStatus.processing  # True if reclaiming expired lease
+
+            # Check if this is a retry and increment retry count
+            if is_retry:
+                job.retry_count += 1
+                print(f"Retry attempt {job.retry_count} for job {job.id}")
+
+                # Check if we've exceeded max retries
+                if job.retry_count >= job.max_retries:
+                    print(f"Job {job.id} has exceeded max retries ({job.max_retries})")
+                    job.status = JobStatus.failed
+                    job.error_message = f"Job failed after {job.max_retries} attempts (max retries exceeded)"
+                    job.completed_at = now
+                    job.lease_expires_at = None  # Clear lease
+
+                    # Refund credits
+                    credit = self.db.query(Credit).filter(Credit.user_id == job.user_id).first()
+                    if credit:
+                        credit.balance += job.credits_used
+                        print(f"Refunded {job.credits_used} credits to user {job.user_id}")
+
+                    self.db.commit()
+                    self.add_job_event(job.id, "max_retries_exceeded", {
+                        "retry_count": job.retry_count,
+                        "max_retries": job.max_retries,
+                        "credits_refunded": job.credits_used
+                    })
+                    return
+
+            # Update job status to processing with lease
             job.status = JobStatus.processing
-            job.started_at = datetime.utcnow()
+            job.started_at = now
+            job.lease_expires_at = now + timedelta(minutes=LEASE_DURATION_MINUTES)
             self.db.commit()
-            
+
             # Add job event
-            self.add_job_event(job.id, "started", {"started_at": job.started_at.isoformat()})
+            event_details = {
+                "started_at": job.started_at.isoformat(),
+                "lease_expires_at": job.lease_expires_at.isoformat(),
+                "retry_count": job.retry_count
+            }
+            if is_retry:
+                event_details["is_retry"] = True
+            self.add_job_event(job.id, "started", event_details)
             
             # Get asset info
             asset = self.db.query(Asset).filter(Asset.id == job.asset_id).first()
@@ -237,6 +297,7 @@ class Worker:
                 job.status = JobStatus.succeeded
                 job.output_path = final_output_path
                 job.completed_at = datetime.utcnow()
+                job.lease_expires_at = None  # Clear lease on success
 
                 # Credits already deducted at job creation (reservation system)
                 self.db.commit()
@@ -279,6 +340,7 @@ class Worker:
             job.status = JobStatus.failed
             job.error_message = error_msg
             job.completed_at = datetime.utcnow()
+            job.lease_expires_at = None  # Clear lease on failure
 
             # Refund credits on failure (credits were reserved at job creation)
             # Check for existing refund to prevent double-refund
@@ -323,6 +385,67 @@ class Worker:
             if 'temp_output_path' in locals() and os.path.exists(temp_output_path):
                 self.cleanup_temp_file(temp_output_path)
     
+    def cleanup_stuck_jobs(self):
+        """
+        Periodically clean up jobs that have exceeded max retries.
+        This marks jobs as permanently failed if they've been retried too many times.
+        """
+        try:
+            now = datetime.utcnow()
+
+            # Find jobs stuck in processing with expired lease AND exceeded max retries
+            stuck_jobs = self.db.query(Job).filter(
+                Job.status == JobStatus.processing,
+                Job.lease_expires_at != None,
+                Job.lease_expires_at < now,
+                Job.retry_count >= Job.max_retries
+            ).all()
+
+            for job in stuck_jobs:
+                print(f"Cleaning up stuck job {job.id} (retries: {job.retry_count}/{job.max_retries})")
+
+                job.status = JobStatus.failed
+                job.error_message = f"Job failed after {job.retry_count} attempts (max retries exceeded, cleaned up by worker)"
+                job.completed_at = now
+                job.lease_expires_at = None
+
+                # Refund credits
+                # Check for existing refund to prevent double-refund
+                existing_refund = (
+                    self.db.query(JobEvent)
+                    .filter(
+                        JobEvent.job_id == job.id,
+                        JobEvent.event_type.in_(["credits_refunded", "max_retries_exceeded"])
+                    )
+                    .first()
+                )
+                if existing_refund:
+                    print(f"Credits already refunded for job {job.id}, skipping refund")
+                else:
+                    credit = self.db.query(Credit).filter(Credit.user_id == job.user_id).first()
+                    if credit and job.credits_used:
+                        credit.balance += job.credits_used
+                        print(f"Refunded {job.credits_used} credits to user {job.user_id}")
+
+                # Add cleanup event
+                self.add_job_event(job.id, "cleanup_max_retries", {
+                    "retry_count": job.retry_count,
+                    "max_retries": job.max_retries,
+                    "completed_at": now.isoformat(),
+                    "credits_refunded": job.credits_used
+                })
+
+            if stuck_jobs:
+                self.db.commit()
+                print(f"Cleaned up {len(stuck_jobs)} stuck job(s)")
+
+        except Exception as e:
+            print(f"Error cleaning up stuck jobs: {e}")
+            try:
+                self.db.rollback()
+            except:
+                pass
+
     def add_job_event(self, job_id: str, event_type: str, details: dict):
         """Add a job event to the audit trail"""
         try:
@@ -339,17 +462,28 @@ class Worker:
     def run(self):
         """Main worker loop"""
         print("Worker started - polling for jobs...")
-        
+        print(f"Lease duration: {LEASE_DURATION_MINUTES} minutes")
+        print(f"Max retries: {MAX_RETRIES}")
+
+        last_cleanup = datetime.utcnow()
+        cleanup_interval = timedelta(minutes=1)  # Run cleanup every minute
+
         while True:
             try:
+                # Periodically clean up stuck jobs
+                now = datetime.utcnow()
+                if now - last_cleanup > cleanup_interval:
+                    self.cleanup_stuck_jobs()
+                    last_cleanup = now
+
                 job = self.poll_jobs()
-                
+
                 if job:
                     self.process_job(job)
                 else:
                     # No jobs found, sleep for a bit
                     time.sleep(5)
-                    
+
             except KeyboardInterrupt:
                 print("Worker stopped by user")
                 break
