@@ -17,7 +17,8 @@ config = context.config
 database_url = os.getenv(
     "DATABASE_URL", "postgresql://luster:luster_dev@localhost:5432/luster"
 )
-config.set_main_option("sqlalchemy.url", database_url)
+# Escape % characters for ConfigParser (double them)
+config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
