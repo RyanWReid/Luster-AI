@@ -276,11 +276,12 @@ def force_fail_job(
     from uuid import UUID
 
     try:
-        job_uuid = UUID(job_id)
+        # Validate UUID format but use string for query (Job.id is String(36))
+        UUID(job_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid job ID format")
 
-    job = db.query(Job).filter(Job.id == job_uuid).first()
+    job = db.query(Job).filter(Job.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
