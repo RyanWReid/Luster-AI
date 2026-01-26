@@ -290,6 +290,15 @@ export default function ProcessingScreen() {
               creditCost: creditPerPhoto,  // Pass credit cost from confirmation screen
             })
 
+            // IMPORTANT: Credits are deducted at job creation (not after processing)
+            // Refresh balance immediately so UI shows correct value
+            try {
+              await refreshCredits()
+              console.log(`💰 Credits refreshed after queuing photo ${i + 1}`)
+            } catch (error) {
+              console.error('Failed to refresh credits after job creation:', error)
+            }
+
             // Store shoot_id from first photo response
             if (i === 0 && enhanceResult.shoot_id) {
               shootId = enhanceResult.shoot_id
@@ -392,13 +401,13 @@ export default function ProcessingScreen() {
           console.log('Updated property to ready status:', currentPropertyId)
         }
 
-        // CRITICAL: Refresh credits after enhancement completes
-        // Credits were deducted during processing, UI needs to reflect new balance
+        // Final credit refresh to ensure balance is accurate
+        // (Credits were already refreshed after each job creation above)
         try {
           await refreshCredits()
-          console.log('💰 Credits refreshed after enhancement')
+          console.log('💰 Final credits refresh after all enhancements complete')
         } catch (error) {
-          console.error('Failed to refresh credits after enhancement:', error)
+          console.error('Failed to refresh credits:', error)
         }
 
         // Navigate to Result screen to show before/after and save option
