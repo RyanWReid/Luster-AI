@@ -1,0 +1,115 @@
+{
+  "identifier" : "A5E7D5B4-8D9E-4C6F-B8A7-1234567890AB",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "CREDITS_10",
+      "localizations" : [
+        {
+          "description" : "10 photo enhancement credits",
+          "displayName" : "10 Credits",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.lusterai.credits.10",
+      "referenceName" : "10 Credits",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "24.99",
+      "familyShareable" : false,
+      "internalID" : "CREDITS_30",
+      "localizations" : [
+        {
+          "description" : "30 photo enhancement credits",
+          "displayName" : "30 Credits",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.lusterai.credits.30",
+      "referenceName" : "30 Credits",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "44.99",
+      "familyShareable" : false,
+      "internalID" : "CREDITS_60",
+      "localizations" : [
+        {
+          "description" : "60 photo enhancement credits",
+          "displayName" : "60 Credits",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.lusterai.credits.60",
+      "referenceName" : "60 Credits",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "LUSTER_APP",
+    "_developerTeamID" : "YOUR_TEAM_ID",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : null,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}
