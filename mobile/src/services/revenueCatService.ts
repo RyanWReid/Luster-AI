@@ -26,9 +26,6 @@ export const PRODUCT_IDS = {
   CREDITS_10: 'com.lusterai.credits.10',
   CREDITS_30: 'com.lusterai.credits.30',
   CREDITS_60: 'com.lusterai.credits.60',
-  // Subscriptions
-  PRO_MONTHLY: 'com.lusterai.pro.monthly',
-  PRO_YEARLY: 'com.lusterai.pro.yearly',
 } as const
 
 // Credit amounts per product (for consumables)
