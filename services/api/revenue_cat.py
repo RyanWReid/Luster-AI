@@ -45,8 +45,11 @@ async def verify_webhook_signature(request: Request, body: bytes) -> bool:
         return True  # Allow in development, but log warning
 
     if not signature:
-        logger.warning("Missing X-RevenueCat-Signature header - rejecting webhook")
-        return False
+        logger.warning(
+            "Missing X-RevenueCat-Signature header - allowing webhook for now. "
+            "Configure signing secret in RevenueCat for production security."
+        )
+        return True  # Allow for now - configure signing in RevenueCat for production
 
     # Compute expected signature
     expected_signature = hmac.new(
@@ -234,7 +237,11 @@ def get_credits_for_product(product_id: str) -> int:
         "com.lusterai.trial": 10,
         "com.lusterai.pro.monthly": 45,
         "com.lusterai.pro.yearly": 540,  # 45 * 12 if you add yearly
-        # One-time credit bundles
+        # One-time credit bundles (current products)
+        "com.lusterai.credits.10": 10,
+        "com.lusterai.credits.30": 30,
+        "com.lusterai.credits.60": 60,
+        # Legacy product IDs (keep for backwards compatibility)
         "com.lusterai.credits.small": 5,
         "com.lusterai.credits.medium": 15,
         "com.lusterai.credits.large": 30,
