@@ -20,6 +20,7 @@ import { useListings } from '../context/ListingsContext'
 import { useAuth } from '../context/AuthContext'
 import hapticFeedback from '../utils/haptics'
 import { api } from '../lib/api'
+import type { PropertyListing } from '../types'
 
 // Back icon
 const BackIcon = () => (
@@ -92,18 +93,21 @@ const StepIndicator = ({ currentStep, totalSteps }: StepIndicatorProps) => {
 interface SummaryRowProps {
   label: string
   value: string
-  onEdit: () => void
+  onEdit?: () => void
+  showEdit?: boolean
 }
 
-const SummaryRow = ({ label, value, onEdit }: SummaryRowProps) => (
+const SummaryRow = ({ label, value, onEdit, showEdit = true }: SummaryRowProps) => (
   <BlurView intensity={60} tint="light" style={styles.summaryRowBlur}>
     <View style={styles.summaryContent}>
       <Text style={styles.summaryLabel}>{label}</Text>
       <Text style={styles.summaryValue}>{value}</Text>
     </View>
-    <TouchableOpacity style={styles.editButton} onPress={onEdit}>
-      <EditIcon />
-    </TouchableOpacity>
+    {showEdit && onEdit && (
+      <TouchableOpacity style={styles.editButton} onPress={onEdit}>
+        <EditIcon />
+      </TouchableOpacity>
+    )}
   </BlurView>
 )
 
@@ -111,18 +115,40 @@ export default function ConfirmationScreen() {
   const navigation = useNavigation()
   const route = useRoute()
   const { selectedPhotos } = usePhotos()
-  const { addListing } = useListings()
+  const { addListing, listings } = useListings()
   const { credits } = useAuth()
   const currentStep = 3
   const [isChecking, setIsChecking] = useState(false)
 
-  // Get data from previous screens
-  const selectedStyle = (route.params as any)?.style || 'Natural'
-  const backendStyle = (route.params as any)?.backendStyle || 'flambient'
-  const photoCount = selectedPhotos.length || 1
+  // Filter existing projects that are completed (can add to)
+  const existingProjects = listings.filter(
+    (l: PropertyListing) => l.status === 'completed' || l.status === 'ready'
+  )
 
-  // Credit calculation - 2 credits per photo
-  const creditPerPhoto = 2
+  // Guard against double-confirmation (survives re-renders but not remounts)
+  const hasConfirmed = useRef(false)
+
+  // Get data from previous screens
+  const params = route.params as any
+  const selectedStyle = params?.style || 'Natural'
+  const backendStyle = params?.backendStyle || 'flambient'
+
+  // Selected project from ProjectSelectionScreen (null = new project)
+  const selectedProjectId = params?.selectedProjectId ?? null
+
+  // Check if this is a regeneration
+  const isRegeneration = params?.isRegeneration ?? false
+  const parentPropertyId = params?.parentPropertyId ?? null
+  const regenIndices = params?.regenIndices ?? []
+  const existingEnhanced = params?.existingEnhanced ?? []
+  const originalPhotos = params?.originalPhotos ?? []
+  const photosToProcess = params?.photosToProcess ?? selectedPhotos
+
+  // Photo count depends on mode
+  const photoCount = isRegeneration ? (params?.photoCount ?? 1) : (selectedPhotos.length || 1)
+
+  // Credit calculation - 1 credit for regen, 2 for normal
+  const creditPerPhoto = isRegeneration ? 1 : 2
   const requiredCredits = photoCount * creditPerPhoto
   const hasEnoughCredits = credits >= requiredCredits
 
@@ -131,6 +157,7 @@ export default function ConfirmationScreen() {
   const stepAnim = useRef(new Animated.Value(0)).current
   const row1Anim = useRef(new Animated.Value(0)).current
   const row2Anim = useRef(new Animated.Value(0)).current
+  const row3Anim = useRef(new Animated.Value(0)).current  // Project row
   const costAnim = useRef(new Animated.Value(0)).current
   const buttonAnim = useRef(new Animated.Value(0)).current
   const blobAnim = useRef(new Animated.Value(0)).current
@@ -142,8 +169,9 @@ export default function ConfirmationScreen() {
       { anim: stepAnim, delay: 80 },
       { anim: row1Anim, delay: 160 },
       { anim: row2Anim, delay: 240 },
-      { anim: costAnim, delay: 320 },
-      { anim: buttonAnim, delay: 420 },
+      { anim: row3Anim, delay: 320 },  // Project row
+      { anim: costAnim, delay: 400 },
+      { anim: buttonAnim, delay: 500 },
     ]
 
     animations.forEach(({ anim, delay }) => {
@@ -191,7 +219,31 @@ export default function ConfirmationScreen() {
     navigation.navigate('NewListing' as never)
   }
 
+  const handleEditProject = () => {
+    hapticFeedback.light()
+    // Navigate to ProjectSelectionScreen with current params
+    navigation.navigate('ProjectSelection' as never, {
+      style: selectedStyle,
+      backendStyle: backendStyle,
+      photoCount: photoCount,
+      selectedProjectId: selectedProjectId,
+    } as never)
+  }
+
+  // Get display name for selected project
+  const getProjectDisplayName = () => {
+    if (!selectedProjectId) return 'New Project'
+    const project = existingProjects.find((p: PropertyListing) => p.id === selectedProjectId)
+    return project?.address || 'New Project'
+  }
+
   const handleConfirm = async () => {
+    // Prevent double-confirmation (e.g., if user navigates back)
+    if (hasConfirmed.current) {
+      console.log('ConfirmationScreen: Already confirmed, ignoring duplicate')
+      return
+    }
+
     // Check credits BEFORE starting
     if (!hasEnoughCredits) {
       hapticFeedback.notification('warning')
@@ -235,29 +287,115 @@ export default function ConfirmationScreen() {
 
     hapticFeedback.medium()
 
-    // Create property card BEFORE entering ProcessingScreen
-    const propertyId = addListing({
-      address: 'New Project',
-      price: '$---,---',
-      beds: 0,
-      baths: 0,
-      image: selectedPhotos[0] ? { uri: selectedPhotos[0] } : require('../../assets/photo.png'),
-      images: [],
-      originalImages: selectedPhotos.map((uri: string) => ({ uri })),
-      isEnhanced: false,
-      status: 'processing',
-    })
+    // Handle regeneration mode
+    if (isRegeneration && parentPropertyId) {
+      // Create temp project for regeneration
+      const tempProjectId = addListing({
+        address: `Regenerating ${photoCount} photo${photoCount > 1 ? 's' : ''}...`,
+        price: '$---,---',
+        beds: 0,
+        baths: 0,
+        image: photosToProcess[0] ? { uri: photosToProcess[0] } : require('../../assets/photo.png'),
+        images: [],
+        originalImages: photosToProcess.map((uri: string) => ({ uri })),
+        isEnhanced: false,
+        status: 'processing',
+      })
 
-    console.log('ConfirmationScreen: Created property with ID:', propertyId)
-    console.log('ConfirmationScreen: Using backend style:', backendStyle)
+      console.log('ConfirmationScreen: Regeneration mode')
+      console.log('  - Parent project:', parentPropertyId)
+      console.log('  - Temp project:', tempProjectId)
+      console.log('  - Regen indices:', regenIndices)
 
-    navigation.navigate('Processing' as never, {
-      propertyId: propertyId,
-      style: backendStyle,  // Use the backend style passed from StyleSelection
-      photos: selectedPhotos,
-      photoCount: photoCount,
-      creditPerPhoto: creditPerPhoto,
-    } as never)
+      hasConfirmed.current = true
+
+      // Navigate to Processing with regeneration params
+      navigation.replace('Processing' as never, {
+        isRegeneration: true,
+        propertyId: tempProjectId,
+        parentPropertyId: parentPropertyId,
+        style: backendStyle,
+        photos: photosToProcess,
+        regenIndices: regenIndices,
+        existingEnhanced: existingEnhanced,
+        originalPhotos: originalPhotos,
+        creditPerPhoto: creditPerPhoto,
+        photoCount: photoCount,
+      } as never)
+      return
+    }
+
+    // Check if adding to existing project (normal flow)
+    const isAddingToExisting = selectedProjectId !== null
+    let propertyId: string
+
+    if (isAddingToExisting) {
+      // Adding to existing project - create a temp project for processing
+      propertyId = addListing({
+        address: `Adding ${photoCount} photo${photoCount > 1 ? 's' : ''}...`,
+        price: '$---,---',
+        beds: 0,
+        baths: 0,
+        image: selectedPhotos[0] ? { uri: selectedPhotos[0] } : require('../../assets/photo.png'),
+        images: [],
+        originalImages: selectedPhotos.map((uri: string) => ({ uri })),
+        isEnhanced: false,
+        status: 'processing',
+      })
+
+      // Get existing project's photos to merge with
+      const existingProject = existingProjects.find((p: PropertyListing) => p.id === selectedProjectId)
+      const existingEnhancedPhotos = existingProject?.images?.map((img: any) => img.uri) || []
+      const existingOriginalPhotos = existingProject?.originalImages?.map((img: any) => img.uri) || []
+
+      console.log('ConfirmationScreen: Adding to existing project:', selectedProjectId)
+      console.log('ConfirmationScreen: Created temp project:', propertyId)
+
+      // Mark as confirmed
+      hasConfirmed.current = true
+
+      // Navigate with parent project info for merge
+      navigation.replace('Processing' as never, {
+        propertyId: propertyId,
+        parentPropertyId: selectedProjectId,
+        style: backendStyle,
+        photos: selectedPhotos,
+        photoCount: photoCount,
+        creditPerPhoto: creditPerPhoto,
+        // For merging: append new photos to existing
+        isAddingToProject: true,
+        existingEnhanced: existingEnhancedPhotos,
+        existingOriginals: existingOriginalPhotos,
+      } as never)
+    } else {
+      // Create new property card BEFORE entering ProcessingScreen
+      propertyId = addListing({
+        address: 'New Project',
+        price: '$---,---',
+        beds: 0,
+        baths: 0,
+        image: selectedPhotos[0] ? { uri: selectedPhotos[0] } : require('../../assets/photo.png'),
+        images: [],
+        originalImages: selectedPhotos.map((uri: string) => ({ uri })),
+        isEnhanced: false,
+        status: 'processing',
+      })
+
+      console.log('ConfirmationScreen: Created new property with ID:', propertyId)
+      console.log('ConfirmationScreen: Using backend style:', backendStyle)
+
+      // Mark as confirmed to prevent double-submission if user somehow returns
+      hasConfirmed.current = true
+
+      // Use replace instead of navigate to remove ConfirmationScreen from stack
+      navigation.replace('Processing' as never, {
+        propertyId: propertyId,
+        style: backendStyle,
+        photos: selectedPhotos,
+        photoCount: photoCount,
+        creditPerPhoto: creditPerPhoto,
+      } as never)
+    }
   }
 
   return (
@@ -344,7 +482,7 @@ export default function ConfirmationScreen() {
             </BlurView>
           </TouchableOpacity>
 
-          <Text style={styles.headerTitle}>Confirm</Text>
+          <Text style={styles.headerTitle}>{isRegeneration ? 'Regenerate' : 'Confirm'}</Text>
 
           <View style={styles.backButton} />
         </Animated.View>
@@ -395,7 +533,7 @@ export default function ConfirmationScreen() {
                 ],
               }}
             >
-              <SummaryRow label="Vibe" value={selectedStyle} onEdit={handleEditVibe} />
+              <SummaryRow label="Vibe" value={selectedStyle} onEdit={handleEditVibe} showEdit={!isRegeneration} />
             </Animated.View>
 
             {/* Photos Count */}
@@ -422,8 +560,38 @@ export default function ConfirmationScreen() {
                 label="Photos"
                 value={`${photoCount} Photo${photoCount > 1 ? 's' : ''}`}
                 onEdit={handleEditPhotos}
+                showEdit={!isRegeneration}
               />
             </Animated.View>
+
+            {/* Project Selection - hide for regeneration */}
+            {!isRegeneration && (
+              <Animated.View
+                style={{
+                  opacity: row3Anim,
+                  transform: [
+                    {
+                      translateY: row3Anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [20, 0],
+                      }),
+                    },
+                    {
+                      scale: row3Anim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0.95, 1],
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <SummaryRow
+                  label="Project"
+                  value={getProjectDisplayName()}
+                  onEdit={handleEditProject}
+                />
+              </Animated.View>
+            )}
 
             {/* Cost Display */}
             <Animated.View
@@ -506,12 +674,13 @@ export default function ConfirmationScreen() {
               {isChecking ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={styles.confirmButtonText}>Start Enhancement</Text>
+                <Text style={styles.confirmButtonText}>{isRegeneration ? 'Start Regeneration' : 'Start Enhancement'}</Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
       </SafeAreaView>
+
     </View>
   )
 }

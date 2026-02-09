@@ -5,8 +5,8 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Image,
 } from 'react-native'
+import CachedImage from '../components/CachedImage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 
@@ -38,7 +38,7 @@ export default function ShootsScreen() {
     <TouchableOpacity style={styles.shootCard}>
       <View style={styles.thumbnailContainer}>
         {item.thumbnail ? (
-          <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} />
+          <CachedImage source={item.thumbnail} style={styles.thumbnail} />
         ) : (
           <View style={styles.placeholderThumbnail}>
             <Ionicons name="images" size={32} color="#9ca3af" />

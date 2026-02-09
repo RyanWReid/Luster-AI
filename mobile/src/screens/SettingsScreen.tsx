@@ -8,7 +8,6 @@ import {
   Switch,
   Animated,
   Alert,
-  Image,
   Dimensions,
   Easing,
 } from 'react-native'

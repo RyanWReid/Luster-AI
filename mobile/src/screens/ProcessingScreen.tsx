@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   Animated,
   Easing,
   Alert,
   Dimensions,
 } from 'react-native'
+import CachedImage from '../components/CachedImage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -20,6 +20,7 @@ import { useAuth } from '../context/AuthContext'
 import { useListings } from '../context/ListingsContext'
 import enhancementService, { InsufficientCreditsError } from '../services/enhancementService'
 import creditService from '../services/creditService'
+import { api } from '../lib/api'
 import hapticFeedback from '../utils/haptics'
 import { useErrorHandler } from '../hooks/useErrorHandler'
 import { RootStackParamList, isValidStyle } from '../types'
@@ -80,7 +81,7 @@ export default function ProcessingScreen() {
   const route = useRoute()
   const { selectedPhotos, setEnhancedPhotos } = usePhotos()
   const { refreshCredits } = useAuth()
-  const { addListing, updateListing, listings, isProcessing, markAsProcessing } = useListings()
+  const { addListing, updateListing, removeListing, listings, isProcessing, markAsProcessing } = useListings()
   const { handleError } = useErrorHandler()
   const firstImage = selectedPhotos[0] || null
 
@@ -93,15 +94,29 @@ export default function ProcessingScreen() {
   const photoCount = params?.photoCount ?? photos.length
   const creditPerPhoto = params?.creditPerPhoto ?? 2 // Default to 2 credits per photo
 
+  // Regeneration-specific params
+  const isRegeneration = params?.isRegeneration ?? false
+  const parentPropertyId = params?.parentPropertyId ?? null  // Original project to merge back into
+  const regenIndices = params?.regenIndices ?? []
+  const existingEnhanced = params?.existingEnhanced ?? []
+  const originalPhotos = params?.originalPhotos ?? photos
+
+  // Add to existing project params
+  const isAddingToProject = params?.isAddingToProject ?? false
+  const existingOriginals = params?.existingOriginals ?? []
+
   // State for tracking progress
   const [processedCount, setProcessedCount] = useState(0)
-  const [currentStatus, setCurrentStatus] = useState('Analyzing your photos...')
+  const [currentStatus, setCurrentStatus] = useState(params?.isRegeneration ? 'Regenerating selected photos...' : 'Enhancing your photos...')
   const [enhancedUrls, setEnhancedUrls] = useState<string[]>([])
   const [canDismiss, setCanDismiss] = useState(false)
   const [propertyId, setPropertyId] = useState<string | null>(existingPropertyId)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [isReturningUser, setIsReturningUser] = useState(false)
 
   // Use ref to track processing state (doesn't trigger re-renders)
   const hasStartedProcessing = useRef(false)
+  const startTimeRef = useRef<number>(Date.now())
 
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -193,6 +208,116 @@ export default function ProcessingScreen() {
     ).start()
   }, [])
 
+  // Elapsed time counter
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startTimeRef.current) / 1000))
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  // Format elapsed time as MM:SS
+  const formatElapsedTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  // Poll for active jobs (used when returning to screen)
+  const pollActiveJobs = async (currentPropertyId: string) => {
+    console.log('ProcessingScreen: Starting to poll for active jobs...')
+    setCanDismiss(true)
+
+    const pollInterval = 3000 // 3 seconds
+    const maxPolls = 200 // ~10 minutes max
+
+    for (let i = 0; i < maxPolls; i++) {
+      try {
+        const response = await api.get<{
+          has_active: boolean
+          active_count: number
+          jobs: Array<{ id: string; status: string }>
+        }>('/jobs/active')
+
+        console.log(`Poll ${i + 1}: Active jobs =`, response.active_count)
+
+        if (!response.has_active) {
+          // No active jobs - but was a job ever created?
+          const listing = listings.find((l: any) => l.id === currentPropertyId)
+
+          // Check if job creation ever succeeded (backendShootId is set after first job creation)
+          if (!listing?.backendShootId) {
+            // Job was never created - likely crashed before upload completed
+            console.log('ProcessingScreen: No active jobs and no backendShootId - job creation failed')
+            hapticFeedback.notification('error')
+
+            if (listing) {
+              updateListing(currentPropertyId, {
+                status: 'failed',
+                error: 'Upload failed - please try again',
+              })
+            }
+
+            Alert.alert(
+              'Upload Failed',
+              'The enhancement could not be started. Please try again.',
+              [{ text: 'OK', onPress: () => navigation.navigate('Main' as never) }]
+            )
+            return
+          }
+
+          // Job was created - all jobs completed, navigate to results
+          console.log('ProcessingScreen: All jobs completed, navigating to results')
+          hapticFeedback.notification('success')
+
+          // Refresh credits
+          try {
+            await refreshCredits()
+          } catch (error) {
+            console.error('Failed to refresh credits:', error)
+          }
+
+          // Check if we have enhanced images
+          if (listing) {
+            updateListing(currentPropertyId, { status: 'ready' })
+
+            navigation.navigate('Result' as never, {
+              propertyId: currentPropertyId,
+              enhancedPhotos: listing.images?.map((img: any) => img.uri) || [],
+              originalPhotos: listing.originalImages?.map((img: any) => img.uri) || [],
+            } as never)
+          } else {
+            // Fallback - go to main
+            navigation.navigate('Main' as never)
+          }
+          return
+        }
+
+        // Update status based on job states
+        const processingCount = response.jobs.filter(j => j.status === 'processing').length
+        const queuedCount = response.jobs.filter(j => j.status === 'queued').length
+
+        if (processingCount > 0) {
+          setCurrentStatus('Enhancing your photos...')
+        } else if (queuedCount > 0) {
+          setCurrentStatus('Waiting in queue...')
+        }
+
+        await new Promise(resolve => setTimeout(resolve, pollInterval))
+      } catch (error) {
+        console.error('Poll error:', error)
+        await new Promise(resolve => setTimeout(resolve, pollInterval))
+      }
+    }
+
+    // Timeout - show error
+    console.error('ProcessingScreen: Polling timeout')
+    hapticFeedback.notification('error')
+    Alert.alert('Processing Timeout', 'Your photos are still being processed. Check back in a moment.')
+    navigation.navigate('Main' as never)
+  }
+
   useEffect(() => {
     // Prevent re-running if already processing
     if (hasStartedProcessing.current) {
@@ -247,8 +372,12 @@ export default function ProcessingScreen() {
 
           // Check global processing tracker (survives re-mounts)
           if (isProcessing(currentPropertyId)) {
-            console.log('ProcessingScreen: GLOBAL CHECK - Property already being processed, skipping:', currentPropertyId)
+            console.log('ProcessingScreen: GLOBAL CHECK - Property already being processed, starting poll mode:', currentPropertyId)
             hasStartedProcessing.current = true
+            setIsReturningUser(true)
+            setCurrentStatus('Enhancing your photos...')
+            // Start polling for job completion instead of re-processing
+            pollActiveJobs(currentPropertyId)
             return
           }
 
@@ -259,7 +388,7 @@ export default function ProcessingScreen() {
           hasStartedProcessing.current = true
         }
 
-        setCurrentStatus('Preparing your photos...')
+        setCurrentStatus(isRegeneration ? 'Preparing selected photos...' : 'Preparing your photos...')
         await new Promise((resolve) => setTimeout(resolve, 1000))
 
         // Credit check is now done in ConfirmationScreen before navigating here
@@ -392,15 +521,6 @@ export default function ProcessingScreen() {
           setEnhancedPhotos(results)
         }
 
-        // Update property status to 'ready'
-        if (currentPropertyId) {
-          updateListing(currentPropertyId, {
-            status: 'ready',
-            images: results.map((uri: string) => ({ uri })),
-          })
-          console.log('Updated property to ready status:', currentPropertyId)
-        }
-
         // Final credit refresh to ensure balance is accurate
         // (Credits were already refreshed after each job creation above)
         try {
@@ -410,15 +530,100 @@ export default function ProcessingScreen() {
           console.error('Failed to refresh credits:', error)
         }
 
+        // For regeneration or adding to project, merge results with existing photos
+        let finalEnhancedPhotos = results
+        let finalOriginalPhotos = photos
+        let finalPropertyId = currentPropertyId
+
+        if (isRegeneration && existingEnhanced.length > 0) {
+          // REGENERATION: Replace photos at specific indices
+          finalEnhancedPhotos = [...existingEnhanced]
+
+          // Replace photos at regenerated indices with new results
+          regenIndices.forEach((originalIndex, resultIndex) => {
+            if (resultIndex < results.length) {
+              finalEnhancedPhotos[originalIndex] = results[resultIndex]
+            }
+          })
+
+          // Use the full original photos array
+          finalOriginalPhotos = originalPhotos
+
+          console.log('Regeneration complete:')
+          console.log('  - Regenerated indices:', regenIndices)
+          console.log('  - Final enhanced photos:', finalEnhancedPhotos.length)
+
+          // Merge back into parent project and delete temp
+          if (parentPropertyId) {
+            console.log('Merging results back into parent project:', parentPropertyId)
+
+            updateListing(parentPropertyId, {
+              images: finalEnhancedPhotos.map((uri: string) => ({ uri })),
+              status: 'completed',
+            })
+
+            if (currentPropertyId) {
+              console.log('Removing temp regen project:', currentPropertyId)
+              removeListing(currentPropertyId)
+            }
+
+            finalPropertyId = parentPropertyId
+          }
+        } else if (isAddingToProject && parentPropertyId) {
+          // ADDING TO PROJECT: Append new photos to existing
+          finalEnhancedPhotos = [...existingEnhanced, ...results]
+          finalOriginalPhotos = [...existingOriginals, ...photos]
+
+          console.log('Adding to project complete:')
+          console.log('  - Existing photos:', existingEnhanced.length)
+          console.log('  - New photos:', results.length)
+          console.log('  - Total enhanced photos:', finalEnhancedPhotos.length)
+
+          // Update parent project with appended photos
+          updateListing(parentPropertyId, {
+            address: `${finalEnhancedPhotos.length} Photos Enhanced`,
+            images: finalEnhancedPhotos.map((uri: string) => ({ uri })),
+            originalImages: finalOriginalPhotos.map((uri: string) => ({ uri })),
+            status: 'completed',
+          })
+
+          // Delete the temp project
+          if (currentPropertyId) {
+            console.log('Removing temp project:', currentPropertyId)
+            removeListing(currentPropertyId)
+          }
+
+          finalPropertyId = parentPropertyId
+        }
+
+        // Update property status (only if not handled above)
+        const wasHandled = (isRegeneration && parentPropertyId) || (isAddingToProject && parentPropertyId)
+        if (currentPropertyId && !wasHandled) {
+          updateListing(currentPropertyId, {
+            status: 'ready',
+            images: finalEnhancedPhotos.map((uri: string) => ({ uri })),
+          })
+          console.log('Updated property to ready status:', currentPropertyId)
+        }
+
         // Navigate to Result screen to show before/after and save option
         navigation.navigate('Result' as never, {
-          propertyId: currentPropertyId,
-          enhancedPhotos: results,
-          originalPhotos: photos,
+          propertyId: finalPropertyId,
+          enhancedPhotos: finalEnhancedPhotos,
+          originalPhotos: finalOriginalPhotos,
+          style: style,
         } as never)
       } catch (error) {
         console.error('Enhancement failed:', error)
         hapticFeedback.notification('error')
+
+        // Mark listing as failed so it doesn't stay stuck in "processing"
+        if (existingPropertyId) {
+          updateListing(existingPropertyId, {
+            status: 'failed',
+            error: error instanceof Error ? error.message : 'Enhancement failed',
+          })
+        }
 
         // Use centralized error handler - handles all error types
         handleError(error, {
@@ -538,9 +743,14 @@ export default function ProcessingScreen() {
           </TouchableOpacity>
 
           <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Enhancing</Text>
+            <Text style={styles.headerTitle}>{isRegeneration ? 'Regenerating' : 'Enhancing'}</Text>
             <Text style={styles.headerSubtitle}>
-              {processedCount > 0 ? `${processedCount} of ${photoCount}` : `${photoCount} photos`}
+              {isReturningUser
+                ? 'In progress...'
+                : processedCount > 0
+                  ? `${processedCount} of ${photoCount}`
+                  : `${photoCount} photo${photoCount > 1 ? 's' : ''}`
+              }
             </Text>
           </View>
 
@@ -563,8 +773,13 @@ export default function ProcessingScreen() {
           {/* Status Text */}
           <Text style={styles.statusText}>{currentStatus}</Text>
 
-          {/* Photo Count */}
-          {processedCount > 0 && (
+          {/* Elapsed Time */}
+          <Text style={styles.elapsedText}>
+            {formatElapsedTime(elapsedSeconds)}
+          </Text>
+
+          {/* Photo Count - only show during initial processing, not when returning */}
+          {processedCount > 0 && !isReturningUser && (
             <Text style={styles.countText}>
               {processedCount} / {photoCount}
             </Text>
@@ -574,10 +789,9 @@ export default function ProcessingScreen() {
           {firstImage && (
             <BlurView intensity={40} tint="light" style={styles.imageCard}>
               <View style={styles.imageWrapper}>
-                <Image
-                  source={{ uri: firstImage }}
+                <CachedImage
+                  source={firstImage}
                   style={styles.previewImage}
-                  resizeMode="cover"
                 />
                 <Animated.View
                   style={[
@@ -708,8 +922,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#111827',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
     letterSpacing: -0.3,
+  },
+  elapsedText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginBottom: 24,
+    fontVariant: ['tabular-nums'],
   },
   countText: {
     fontSize: 48,

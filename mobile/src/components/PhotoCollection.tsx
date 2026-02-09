@@ -5,11 +5,11 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Dimensions,
   Animated,
   Platform,
 } from 'react-native'
+import CachedImage from './CachedImage'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
 import hapticFeedback from '../utils/haptics'
@@ -94,7 +94,7 @@ export default function PhotoCollection({ collections, onCollectionPress }: Phot
                   imgIndex === 0 && collection.images.length === 1 && styles.fullImage,
                 ]}
               >
-                <Image source={image} style={styles.image} resizeMode="cover" />
+                <CachedImage source={image} style={styles.image} />
               </View>
             ))}
           </View>

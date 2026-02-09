@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ScrollView,
   Animated,
   Easing,
   Dimensions,
 } from 'react-native'
+import CachedImage from '../components/CachedImage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import * as ImagePicker from 'expo-image-picker'
@@ -333,7 +333,7 @@ export default function NewListingScreen() {
               {selectedImages.map((uri, index) => (
                 <Animated.View key={index} style={styles.photoItem}>
                   <BlurView intensity={40} tint="light" style={styles.photoCard}>
-                    <Image source={{ uri }} style={styles.uploadedPhoto} />
+                    <CachedImage source={uri} style={styles.uploadedPhoto} />
                     <TouchableOpacity
                       style={styles.removePhotoButton}
                       onPress={() => removeImage(index)}

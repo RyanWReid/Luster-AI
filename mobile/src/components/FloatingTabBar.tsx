@@ -4,8 +4,8 @@ import {
   TouchableOpacity,
   StyleSheet,
   Animated,
-  Image,
 } from 'react-native'
+import CachedImage from './CachedImage'
 import { BlurView } from 'expo-blur'
 import { LinearGradient } from 'expo-linear-gradient'
 import Svg, { Path, Circle } from 'react-native-svg'
@@ -158,9 +158,10 @@ export default function FloatingTabBar({ state, descriptors, navigation }: TabBa
                   end={{ x: 1, y: 1 }}
                   style={styles.enhanceCircleGradient}
                 >
-                  <Image
+                  <CachedImage
                     source={starLogo}
                     style={styles.enhanceLogo}
+                    contentFit="contain"
                   />
                   {/* Shine overlay animation */}
                   <Animated.View
@@ -307,7 +308,6 @@ const styles = StyleSheet.create({
   enhanceLogo: {
     width: 34,
     height: 34,
-    resizeMode: 'contain',
   },
   enhanceShineOverlay: {
     position: 'absolute',

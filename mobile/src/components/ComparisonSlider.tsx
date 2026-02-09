@@ -3,12 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  Image,
   Dimensions,
   Animated,
   Platform,
   PanResponder,
 } from 'react-native'
+import CachedImage from './CachedImage'
 import { BlurView } from 'expo-blur'
 import hapticFeedback from '../utils/haptics'
 import Svg, { Line, Circle } from 'react-native-svg'
@@ -140,7 +140,7 @@ export default function ComparisonSlider({
     >
       {/* After Image (Right) */}
       <View style={styles.imageContainer}>
-        <Image source={afterImage} style={styles.image} resizeMode="cover" />
+        <CachedImage source={afterImage} style={styles.image} />
       </View>
 
       {/* Before Image (Left) - Overlaid and clipped */}
@@ -152,10 +152,9 @@ export default function ComparisonSlider({
           },
         ]}
       >
-        <Image
+        <CachedImage
           source={beforeImage}
           style={[styles.beforeImage, { width: containerWidth }]}
-          resizeMode="cover"
         />
       </Animated.View>
 

@@ -8,12 +8,12 @@ import {
   Animated,
   Dimensions,
   ScrollView,
-  Image,
   Alert,
   TextInput,
   Share,
   Easing,
 } from 'react-native'
+import CachedImage from '../components/CachedImage'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
@@ -607,10 +607,10 @@ export default function ProjectScreen() {
                       style={styles.photoContainer}
                     >
                       <BlurView intensity={80} tint="light" style={styles.photoCard}>
-                        <Image
-                          source={{ uri: photoUri }}
+                        <CachedImage
+                          source={photoUri}
                           style={styles.photoImage}
-                          resizeMode="cover"
+                          contentFit="cover"
                         />
 
                         {isSelectionMode && (

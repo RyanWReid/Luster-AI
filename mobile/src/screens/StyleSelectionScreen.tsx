@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ScrollView,
   Dimensions,
   Animated,
   Easing,
 } from 'react-native'
+import CachedImage from '../components/CachedImage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation } from '@react-navigation/native'
 import type { StackNavigationProp } from '@react-navigation/stack'
@@ -133,7 +133,7 @@ const StyleCard = ({ title, image, isSelected, onSelect }: StyleCardProps) => {
             tint="light"
             style={styles.imageContainer}
           >
-            <Image source={image} style={styles.styleImage} />
+            <CachedImage source={image} style={styles.styleImage} />
             {isSelected && (
               <View style={styles.checkmarkContainer}>
                 <LinearGradient

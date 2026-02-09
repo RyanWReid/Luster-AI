@@ -9,6 +9,7 @@ import LoginScreen from '../screens/LoginScreen'
 import NewListingScreen from '../screens/NewListingScreen'
 import StyleSelectionScreen from '../screens/StyleSelectionScreen'
 import ConfirmationScreen from '../screens/ConfirmationScreen'
+import ProjectSelectionScreen from '../screens/ProjectSelectionScreen'
 import ProcessingScreen from '../screens/ProcessingScreen'
 import ResultScreen from '../screens/ResultScreen'
 import ProjectScreen from '../screens/ProjectScreen'
@@ -39,6 +40,7 @@ export default function RootNavigator() {
             <Stack.Screen name="NewListing" component={NewListingScreen} />
             <Stack.Screen name="StyleSelection" component={StyleSelectionScreen} />
             <Stack.Screen name="Confirmation" component={ConfirmationScreen} />
+            <Stack.Screen name="ProjectSelection" component={ProjectSelectionScreen} />
             <Stack.Screen name="Processing" component={ProcessingScreen} />
             <Stack.Screen name="Result" component={ResultScreen} />
             <Stack.Screen name="Project" component={ProjectScreen} />

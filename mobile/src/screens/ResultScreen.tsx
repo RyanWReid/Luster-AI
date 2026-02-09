@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   ScrollView,
   Dimensions,
   FlatList,
@@ -13,15 +12,17 @@ import {
   Alert,
   Pressable,
 } from 'react-native'
+import CachedImage from '../components/CachedImage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
-import Svg, { Path } from 'react-native-svg'
+import Svg, { Path, Circle } from 'react-native-svg'
 import * as MediaLibrary from 'expo-media-library'
 import * as Sharing from 'expo-sharing'
 import { usePhotos } from '../context/PhotoContext'
-import { useListings } from '../context/ListingsContext'  // updateListing only - no addListing to prevent duplicates
+import { useAuth } from '../context/AuthContext'
+import { useListings } from '../context/ListingsContext'
 import hapticFeedback from '../utils/haptics'
 import type { RootStackParamList } from '../types'
 
@@ -83,6 +84,56 @@ const RefreshIcon = () => (
   </Svg>
 )
 
+const CheckIcon = () => (
+  <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M20 6L9 17l-5-5"
+      stroke="#FFFFFF"
+      strokeWidth="3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+const SelectIcon = () => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M9 11l3 3L22 4"
+      stroke="#111827"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"
+      stroke="#111827"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
+const RefreshIconWhite = () => (
+  <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M1 4v6h6M23 20v-6h-6"
+      stroke="#FFFFFF"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"
+      stroke="#FFFFFF"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+)
+
 interface EnhancedImage {
   id: string
   original: any
@@ -93,9 +144,14 @@ export default function ResultScreen() {
   const navigation = useNavigation()
   const route = useRoute()
   const { selectedPhotos, enhancedPhotos } = usePhotos()
+  const { credits } = useAuth()
   const { updateListing } = useListings()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showingOriginal, setShowingOriginal] = useState(false)
+
+  // Selection mode for regeneration
+  const [selectionMode, setSelectionMode] = useState(false)
+  const [selectedForRegen, setSelectedForRegen] = useState<Set<number>>(new Set())
 
   // Animation for crossfade between images
   const crossfadeAnim = useRef(new Animated.Value(0)).current
@@ -108,6 +164,7 @@ export default function ResultScreen() {
   // Get enhanced photos from navigation params or context
   const params = route.params as RootStackParamList['Result'] | undefined
   const propertyId = params?.propertyId ?? null
+  const currentStyle = params?.style ?? 'luster'
   const enhancedFromNav = params?.enhancedPhotos ?? enhancedPhotos ?? []
   const originalFromNav = params?.originalPhotos ?? selectedPhotos ?? []
 
@@ -219,19 +276,89 @@ export default function ResultScreen() {
     }
   }
 
+  // Toggle selection mode
+  const toggleSelectionMode = () => {
+    hapticFeedback.light()
+    if (selectionMode) {
+      // Exiting selection mode - clear selections
+      setSelectedForRegen(new Set())
+    }
+    setSelectionMode(!selectionMode)
+  }
+
+  // Toggle photo selection for regeneration
+  const togglePhotoSelection = (index: number) => {
+    hapticFeedback.light()
+    const newSelection = new Set(selectedForRegen)
+    if (newSelection.has(index)) {
+      newSelection.delete(index)
+    } else {
+      newSelection.add(index)
+    }
+    setSelectedForRegen(newSelection)
+  }
+
+  // Handle regeneration of selected photos - navigate to Confirmation screen
+  const handleRegenerateSelected = () => {
+    const selectedCount = selectedForRegen.size
+    if (selectedCount === 0) return
+
+    hapticFeedback.medium()
+
+    // Get the selected photos info
+    const regenIndices = Array.from(selectedForRegen)
+    const photosToRegen = regenIndices.map(i => originalFromNav[i])
+
+    // First save the current project (so user doesn't lose progress)
+    if (propertyId) {
+      const allEnhancedImages = enhancedFromNav
+        .filter((url: string) => url && url !== '')
+        .map((url: string) => ({ uri: url }))
+      const allOriginalImages = originalFromNav.map((url: string) => ({ uri: url }))
+
+      updateListing(propertyId, {
+        address: `${allEnhancedImages.length} Photos Enhanced`,
+        image: allEnhancedImages[0] || images[0].enhanced,
+        images: allEnhancedImages,
+        originalImages: allOriginalImages,
+        isEnhanced: true,
+        status: 'completed',
+      })
+      console.log('Saved parent project before regen:', propertyId)
+    }
+
+    // Map backend style to display style for Confirmation screen
+    const styleDisplayMap: Record<string, string> = {
+      'luster': 'Luster',
+      'flambient': 'Natural',
+      'warm': 'Warm',
+    }
+    const displayStyle = styleDisplayMap[currentStyle] || 'Luster'
+
+    // Navigate to Confirmation screen with regeneration params
+    navigation.navigate('Confirmation' as never, {
+      style: displayStyle,
+      backendStyle: currentStyle,
+      photoCount: selectedCount,
+      // Regeneration-specific params
+      isRegeneration: true,
+      parentPropertyId: propertyId,
+      regenIndices: regenIndices,
+      existingEnhanced: enhancedFromNav,
+      originalPhotos: originalFromNav,
+      photosToProcess: photosToRegen,
+    } as never)
+
+    // Reset selection mode
+    setSelectionMode(false)
+    setSelectedForRegen(new Set())
+  }
+
+  // Legacy regenerate all (keeping for reference, but replaced by selection mode)
   const handleRegenerate = () => {
     hapticFeedback.medium()
-    Alert.alert(
-      'Regenerate Photos?',
-      'This will use additional credits to re-process your photos.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Regenerate',
-          onPress: () => navigation.navigate('Processing' as never),
-        },
-      ]
-    )
+    // Enter selection mode instead of regenerating all
+    setSelectionMode(true)
   }
 
   const handleSaveAll = async () => {
@@ -268,25 +395,48 @@ export default function ResultScreen() {
     navigation.navigate('Main' as never)
   }
 
-  const renderThumbnail = ({ item, index }: { item: EnhancedImage; index: number }) => (
-    <TouchableOpacity
-      style={[styles.thumbnail, index === currentIndex && styles.thumbnailActive]}
-      onPress={() => {
-        hapticFeedback.light()
-        setCurrentIndex(index)
-      }}
-    >
-      <Image source={item.enhanced} style={styles.thumbnailImage} />
-      {index === currentIndex && (
-        <View style={styles.thumbnailBorder}>
-          <LinearGradient
-            colors={['#D4AF37', '#F59E0B']}
-            style={styles.thumbnailGradient}
-          />
-        </View>
-      )}
-    </TouchableOpacity>
-  )
+  const renderThumbnail = ({ item, index }: { item: EnhancedImage; index: number }) => {
+    const isSelected = selectedForRegen.has(index)
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.thumbnail,
+          index === currentIndex && !selectionMode && styles.thumbnailActive,
+          selectionMode && isSelected && styles.thumbnailSelected,
+        ]}
+        onPress={() => {
+          if (selectionMode) {
+            togglePhotoSelection(index)
+          } else {
+            hapticFeedback.light()
+            setCurrentIndex(index)
+          }
+        }}
+      >
+        <CachedImage source={item.enhanced} style={styles.thumbnailImage} />
+
+        {/* Selection checkbox overlay */}
+        {selectionMode && (
+          <View style={styles.checkboxContainer}>
+            <View style={[styles.checkbox, isSelected && styles.checkboxSelected]}>
+              {isSelected && <CheckIcon />}
+            </View>
+          </View>
+        )}
+
+        {/* Current viewing indicator (only when not in selection mode) */}
+        {index === currentIndex && !selectionMode && (
+          <View style={styles.thumbnailBorder}>
+            <LinearGradient
+              colors={['#D4AF37', '#F59E0B']}
+              style={styles.thumbnailGradient}
+            />
+          </View>
+        )}
+      </TouchableOpacity>
+    )
+  }
 
   return (
     <View style={styles.container}>
@@ -351,7 +501,10 @@ export default function ResultScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            selectionMode && selectedForRegen.size > 0 && styles.scrollContentWithActionBar,
+          ]}
         >
           {/* Header */}
           <Animated.View
@@ -363,19 +516,54 @@ export default function ResultScreen() {
               },
             ]}
           >
-            <TouchableOpacity onPress={handleBack} style={styles.headerButton}>
-              <BlurView intensity={60} tint="light" style={styles.headerButtonBlur}>
-                <BackIcon />
-              </BlurView>
-            </TouchableOpacity>
+            {selectionMode ? (
+              // Selection mode header
+              <>
+                <TouchableOpacity onPress={toggleSelectionMode} style={styles.headerTextButton}>
+                  <Text style={styles.headerTextButtonLabel}>Cancel</Text>
+                </TouchableOpacity>
 
-            <Text style={styles.headerTitle}>Results</Text>
+                <Text style={styles.headerTitle}>
+                  {selectedForRegen.size > 0
+                    ? `${selectedForRegen.size} Selected`
+                    : 'Select Photos'}
+                </Text>
 
-            <TouchableOpacity onPress={handleRegenerate} style={styles.headerButton}>
-              <BlurView intensity={60} tint="light" style={styles.headerButtonBlur}>
-                <RefreshIcon />
-              </BlurView>
-            </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    // Select all photos
+                    hapticFeedback.light()
+                    if (selectedForRegen.size === images.length) {
+                      setSelectedForRegen(new Set())
+                    } else {
+                      setSelectedForRegen(new Set(images.map((_, i) => i)))
+                    }
+                  }}
+                  style={styles.headerTextButton}
+                >
+                  <Text style={styles.headerTextButtonLabel}>
+                    {selectedForRegen.size === images.length ? 'None' : 'All'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              // Normal header
+              <>
+                <TouchableOpacity onPress={handleBack} style={styles.headerButton}>
+                  <BlurView intensity={60} tint="light" style={styles.headerButtonBlur}>
+                    <BackIcon />
+                  </BlurView>
+                </TouchableOpacity>
+
+                <Text style={styles.headerTitle}>Results</Text>
+
+                <TouchableOpacity onPress={handleRegenerate} style={styles.headerButton}>
+                  <BlurView intensity={60} tint="light" style={styles.headerButtonBlur}>
+                    <SelectIcon />
+                  </BlurView>
+                </TouchableOpacity>
+              </>
+            )}
           </Animated.View>
 
           {/* Main Image Viewer with Slider */}
@@ -391,10 +579,9 @@ export default function ResultScreen() {
             <BlurView intensity={40} tint="light" style={styles.imageCard}>
               <Pressable onPress={toggleImage} style={styles.imageContainer}>
                 {/* Enhanced Image (base layer) */}
-                <Image
+                <CachedImage
                   source={images[currentIndex].enhanced}
                   style={styles.mainImage}
-                  resizeMode="cover"
                 />
 
                 {/* Original Image (overlay with crossfade) */}
@@ -406,10 +593,9 @@ export default function ResultScreen() {
                     },
                   ]}
                 >
-                  <Image
+                  <CachedImage
                     source={images[currentIndex].original}
                     style={styles.mainImage}
-                    resizeMode="cover"
                   />
                 </Animated.View>
 
@@ -434,26 +620,24 @@ export default function ResultScreen() {
             </BlurView>
           </Animated.View>
 
-          {/* Thumbnail Gallery */}
-          {images.length > 1 && (
-            <Animated.View
-              style={[
-                styles.thumbnailSection,
-                {
-                  opacity: fadeAnim,
-                },
-              ]}
-            >
-              <FlatList
-                data={images}
-                renderItem={renderThumbnail}
-                keyExtractor={(item) => item.id}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.thumbnailList}
-              />
-            </Animated.View>
-          )}
+          {/* Thumbnail Gallery - always show, even for single photo */}
+          <Animated.View
+            style={[
+              styles.thumbnailSection,
+              {
+                opacity: fadeAnim,
+              },
+            ]}
+          >
+            <FlatList
+              data={images}
+              renderItem={renderThumbnail}
+              keyExtractor={(item) => item.id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.thumbnailList}
+            />
+          </Animated.View>
 
           {/* Action Buttons */}
           <Animated.View
@@ -502,6 +686,40 @@ export default function ResultScreen() {
             </TouchableOpacity>
           </Animated.View>
         </ScrollView>
+
+        {/* Bottom Action Bar for Regeneration */}
+        {selectionMode && selectedForRegen.size > 0 && (
+          <Animated.View style={styles.regenActionBar}>
+            <BlurView intensity={90} tint="light" style={styles.regenActionBarBlur}>
+              <View style={styles.regenActionBarContent}>
+                <View style={styles.regenInfo}>
+                  <Text style={styles.regenInfoText}>
+                    {selectedForRegen.size} photo{selectedForRegen.size > 1 ? 's' : ''} selected
+                  </Text>
+                  <Text style={styles.regenCreditText}>
+                    {selectedForRegen.size} credit{selectedForRegen.size > 1 ? 's' : ''}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  onPress={handleRegenerateSelected}
+                  activeOpacity={0.8}
+                  style={styles.regenButton}
+                >
+                  <LinearGradient
+                    colors={['#D4AF37', '#B8860B']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.regenButtonGradient}
+                  >
+                    <RefreshIconWhite />
+                    <Text style={styles.regenButtonText}>Regenerate</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              </View>
+            </BlurView>
+          </Animated.View>
+        )}
       </SafeAreaView>
     </View>
   )
@@ -536,6 +754,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
+  },
+  scrollContentWithActionBar: {
+    paddingBottom: 120, // Extra space for action bar
   },
   header: {
     flexDirection: 'row',
@@ -700,5 +921,98 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     letterSpacing: 0.3,
+  },
+  // Header text buttons for selection mode
+  headerTextButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  headerTextButtonLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#D4AF37',
+  },
+  // Thumbnail selection styles
+  thumbnailSelected: {
+    borderWidth: 3,
+    borderColor: '#D4AF37',
+    borderRadius: 16,
+  },
+  checkboxContainer: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    zIndex: 10,
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: '#D4AF37',
+    borderColor: '#D4AF37',
+  },
+  // Bottom action bar for regeneration
+  regenActionBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  regenActionBarBlur: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderBottomWidth: 0,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+  },
+  regenActionBarContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    paddingBottom: 32, // Extra padding for home indicator
+  },
+  regenInfo: {
+    flex: 1,
+  },
+  regenInfoText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  regenCreditText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  regenButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  regenButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  regenButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 })

@@ -5,11 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Image,
   Alert,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native'
+import CachedImage from '../components/CachedImage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
@@ -176,7 +176,7 @@ export default function HomeScreen() {
         <View style={styles.uploadSection}>
           {selectedImage ? (
             <View style={styles.imageContainer}>
-              <Image source={{ uri: selectedImage }} style={styles.previewImage} />
+              <CachedImage source={selectedImage} style={styles.previewImage} />
               <TouchableOpacity
                 style={styles.removeButton}
                 onPress={() => {
@@ -204,10 +204,10 @@ export default function HomeScreen() {
         {enhancedImageUrl && (
           <View style={styles.resultSection}>
             <Text style={styles.sectionTitle}>Enhanced Result</Text>
-            <Image
-              source={{ uri: enhancedImageUrl }}
+            <CachedImage
+              source={enhancedImageUrl}
               style={styles.resultImage}
-              resizeMode="contain"
+              contentFit="contain"
             />
           </View>
         )}

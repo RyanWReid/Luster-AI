@@ -115,6 +115,21 @@ export type RootStackParamList = {
     style: DisplayStyle        // Display name for UI (Natural, Warm, Luster)
     backendStyle: EnhancementStyle  // Backend API style (flambient, warm, luster)
     photoCount: number
+    selectedProjectId?: string | null  // null = new project, string = existing project ID
+    // Regeneration-specific params (optional)
+    isRegeneration?: boolean
+    parentPropertyId?: string       // Original project to merge back into
+    regenIndices?: number[]         // Which photo positions to regenerate
+    existingEnhanced?: string[]     // Existing enhanced photos
+    originalPhotos?: string[]       // Full array of original photos
+    photosToProcess?: string[]      // Photos to actually process (for regen, just selected ones)
+  }
+  ProjectSelection: {
+    // Pass through all Confirmation params so we can return with selection
+    style: DisplayStyle
+    backendStyle: EnhancementStyle
+    photoCount: number
+    selectedProjectId?: string | null
   }
   Processing: {
     propertyId?: string
@@ -122,11 +137,21 @@ export type RootStackParamList = {
     photos?: Photo[] | string[]  // Can be Photo objects or URI strings
     photoCount?: number
     creditPerPhoto?: number  // Credit cost per photo (for flexible pricing)
+    // Regeneration-specific params
+    isRegeneration?: boolean
+    parentPropertyId?: string       // Original project to merge results back into
+    regenIndices?: number[]        // Which photo positions to regenerate
+    existingEnhanced?: string[]    // Existing enhanced photos to preserve
+    originalPhotos?: string[]      // Full array of original photos
+    // Add to existing project params
+    isAddingToProject?: boolean
+    existingOriginals?: string[]   // Original photos from parent project
   }
   Result: {
     propertyId?: string
     enhancedPhotos?: string[]
     originalPhotos?: Photo[] | string[]  // Can be Photo objects or URI strings
+    style?: EnhancementStyle  // Current style for regeneration
   }
 
   // Property screens

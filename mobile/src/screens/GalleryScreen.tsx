@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Dimensions,
   StatusBar,
   FlatList,
@@ -14,6 +13,8 @@ import {
   Pressable,
   ActivityIndicator,
 } from 'react-native'
+import { Image } from 'expo-image'
+import CachedImage from '../components/CachedImage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useNavigation, useRoute } from '@react-navigation/native'
 import Svg, { Path, Circle, G, Rect } from 'react-native-svg'
@@ -322,7 +323,7 @@ export default function GalleryScreenNew() {
           onPress={() => handleImagePress(index)}
           style={styles.imageContainer}
         >
-          <Image source={item.uri} style={styles.gridImage} resizeMode="cover" />
+          <CachedImage source={item.uri} style={styles.gridImage} />
 
           {item.isEnhanced && (
             <BlurView intensity={60} style={styles.enhancedBadge}>

@@ -5,15 +5,16 @@ import {
   StyleSheet,
   TouchableOpacity,
   FlatList,
-  Image,
   Dimensions,
   Animated,
   Alert,
+  Easing,
 } from 'react-native'
+import CachedImage from '../components/CachedImage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
-import Svg, { Path } from 'react-native-svg'
+import Svg, { Path, Circle } from 'react-native-svg'
 import { useNavigation } from '@react-navigation/native'
 import { useListings } from '../context/ListingsContext'
 
@@ -98,16 +99,56 @@ const allProperties = [
 // Property Card Component
 const PropertyCard = ({ item, onPress }: { item: any; onPress: (item: any) => void }) => {
   const cardScale = useRef(new Animated.Value(1)).current
-  const isFailed = item.status === 'failed'
+  const spinAnim = useRef(new Animated.Value(0)).current
+  const pulseAnim = useRef(new Animated.Value(1)).current
 
-  // Debug image source
-  const imageUri = typeof item.image === 'object' && item.image.uri ? item.image.uri : null
-  console.log('🖼️ PropertyCard rendering:', {
-    id: item.id,
-    address: item.address,
-    imageType: typeof item.image,
-    imageSource: imageUri || 'local require()',
-    fullUri: imageUri,
+  const isFailed = item.status === 'failed'
+  const isProcessing = item.status === 'processing'
+  const isReady = item.status === 'ready'
+
+  // Spin animation for processing spinner
+  useEffect(() => {
+    if (isProcessing) {
+      const spinAnimation = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      )
+      spinAnimation.start()
+      return () => spinAnimation.stop()
+    }
+  }, [isProcessing, spinAnim])
+
+  // Pulse animation for ready checkmark
+  useEffect(() => {
+    if (isReady) {
+      const pulseAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 800,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      )
+      pulseAnimation.start()
+      return () => pulseAnimation.stop()
+    }
+  }, [isReady, pulseAnim])
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
   })
 
   const handlePressIn = () => {
@@ -128,44 +169,6 @@ const PropertyCard = ({ item, onPress }: { item: any; onPress: (item: any) => vo
     }).start()
   }
 
-  const handleImageLoadStart = () => {
-    console.log('🔄 Image load started for:', item.id)
-  }
-
-  const handleImageLoadEnd = () => {
-    console.log('✅ Image loaded successfully for:', item.id)
-  }
-
-  const handleImageError = (error: any) => {
-    console.error('❌ Image load FAILED for:', item.id)
-    console.error('Error details:', {
-      nativeEvent: error.nativeEvent,
-      error: error.nativeEvent?.error,
-      message: error.nativeEvent?.message,
-      uri: imageUri,
-    })
-
-    // Try to fetch the URL directly to see what's happening
-    if (imageUri) {
-      console.log('🔍 Attempting direct fetch to debug...')
-      fetch(imageUri, { method: 'HEAD' })
-        .then(response => {
-          console.log('Direct fetch response:', {
-            status: response.status,
-            statusText: response.statusText,
-            headers: {
-              'content-type': response.headers.get('content-type'),
-              'content-length': response.headers.get('content-length'),
-              'location': response.headers.get('location'),
-            },
-          })
-        })
-        .catch(fetchError => {
-          console.error('Direct fetch also failed:', fetchError.message)
-        })
-    }
-  }
-
   return (
     <Animated.View
       style={[
@@ -183,13 +186,58 @@ const PropertyCard = ({ item, onPress }: { item: any; onPress: (item: any) => vo
         onPress={() => onPress(item)}
       >
         <View style={styles.cardImageContainer}>
-          <Image
+          <CachedImage
             source={item.image}
             style={styles.gridImage}
-            onLoadStart={handleImageLoadStart}
-            onLoadEnd={handleImageLoadEnd}
-            onError={handleImageError}
           />
+
+          {/* Processing State Overlay */}
+          {isProcessing && (
+            <BlurView intensity={80} tint="light" style={styles.processingOverlay}>
+              <View style={styles.spinnerContainer}>
+                <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                  <Svg width={48} height={48} viewBox="0 0 64 64">
+                    <Circle
+                      cx="32"
+                      cy="32"
+                      r="26"
+                      stroke="#6B7280"
+                      strokeWidth="4.5"
+                      fill="none"
+                      strokeDasharray="130, 32"
+                      strokeLinecap="round"
+                    />
+                  </Svg>
+                </Animated.View>
+              </View>
+            </BlurView>
+          )}
+
+          {/* Ready State Overlay */}
+          {isReady && (
+            <BlurView intensity={80} tint="light" style={styles.readyOverlay}>
+              <Animated.View
+                style={[
+                  styles.checkmarkCircle,
+                  {
+                    transform: [{ scale: pulseAnim }],
+                  },
+                ]}
+              >
+                <Svg width={36} height={36} viewBox="0 0 24 24" fill="none">
+                  <Path
+                    d="M20 6L9 17l-5-5"
+                    stroke="#4A90E2"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </Svg>
+              </Animated.View>
+            </BlurView>
+          )}
+
+          {/* Failed State Overlay */}
           {isFailed && (
             <View style={styles.failedOverlay}>
               <View style={styles.failedBadge}>
@@ -198,11 +246,15 @@ const PropertyCard = ({ item, onPress }: { item: any; onPress: (item: any) => vo
             </View>
           )}
         </View>
-        <BlurView intensity={60} tint="light" style={styles.gridOverlay}>
-          <Text style={[styles.gridAddress, isFailed && styles.failedAddress]} numberOfLines={2}>
-            {item.address}
-          </Text>
-        </BlurView>
+
+        {/* Bottom text overlay - hide for processing/ready states */}
+        {!isProcessing && !isReady && (
+          <BlurView intensity={60} tint="light" style={styles.gridOverlay}>
+            <Text style={[styles.gridAddress, isFailed && styles.failedAddress]} numberOfLines={2}>
+              {item.address}
+            </Text>
+          </BlurView>
+        )}
       </TouchableOpacity>
     </Animated.View>
   )
@@ -376,7 +428,6 @@ const styles = StyleSheet.create({
   gridImage: {
     width: '100%',
     height: '100%',
-    resizeMode: 'cover',
   },
   gridOverlay: {
     position: 'absolute',
@@ -422,5 +473,31 @@ const styles = StyleSheet.create({
   },
   failedAddress: {
     color: '#ef4444',
+  },
+  // Processing State
+  processingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  spinnerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Ready State
+  readyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  checkmarkCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(74, 144, 226, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })

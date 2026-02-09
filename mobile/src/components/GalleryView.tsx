@@ -5,9 +5,9 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Image,
   Dimensions,
 } from 'react-native'
+import CachedImage from './CachedImage'
 import ImageViewing from 'react-native-image-viewing'
 import { useNavigation } from '@react-navigation/native'
 import Svg, { Path, Circle } from 'react-native-svg'
@@ -139,10 +139,10 @@ export default function GalleryView({ propertyData }: GalleryViewProps) {
             onPress={() => handleImagePress(image, actualIndex)}
             activeOpacity={0.9}
           >
-            <Image
+            <CachedImage
               source={image.uri}
               style={styles.image}
-              resizeMode="cover"
+              contentFit="cover"
             />
           </TouchableOpacity>
         )

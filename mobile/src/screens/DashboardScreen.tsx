@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   FlatList,
-  Image,
   Dimensions,
   ActivityIndicator,
   Animated,
@@ -15,6 +14,7 @@ import {
   Alert,
   RefreshControl,
 } from 'react-native'
+import CachedImage from '../components/CachedImage'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { BlurView } from 'expo-blur'
@@ -458,7 +458,7 @@ export default function DashboardScreenNew() {
           onPress={() => handlePropertyPress(item)}
         >
           <View style={styles.cardImageContainer}>
-            <Image
+            <CachedImage
               source={item.image}
               style={styles.gridImage}
             />
@@ -738,16 +738,16 @@ export default function DashboardScreenNew() {
             ) : (
               <BlurView intensity={40} tint="light" style={styles.emptyStateCard}>
                 <View style={styles.emptyStateLogoContainer}>
-                  <Image
+                  <CachedImage
                     source={lusterLogoWhite}
                     style={styles.emptyStateLogo}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                 </View>
                 <Text style={styles.emptyStateText}>
                   Get started by pressing{' '}
                   <View style={styles.emptyStateLogoInlineContainer}>
-                    <Image source={lusterLogoWhite} style={styles.emptyStateLogoInline} resizeMode="contain" />
+                    <CachedImage source={lusterLogoWhite} style={styles.emptyStateLogoInline} contentFit="contain" />
                   </View>
                 </Text>
               </BlurView>
