@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react'
+import React, { useCallback, useRef } from 'react'
 import {
   View,
   StyleSheet,
@@ -25,6 +25,7 @@ import hapticFeedback from '../utils/haptics'
 export default function CreditsScreen() {
   const navigation = useNavigation()
   const { user, refreshCredits } = useAuth()
+  const hasShownPaywall = useRef(false)
 
   // Present paywall when screen mounts
   useFocusEffect(
@@ -32,6 +33,15 @@ export default function CreditsScreen() {
       let isActive = true
 
       const showPaywall = async () => {
+        // Only show paywall once per screen mount
+        if (hasShownPaywall.current) {
+          if (navigation.canGoBack()) {
+            navigation.goBack()
+          }
+          return
+        }
+        hasShownPaywall.current = true
+
         try {
           // Initialize RevenueCat with user ID
           if (user?.id) {
