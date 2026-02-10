@@ -571,6 +571,7 @@ def create_job(
 
     # Build merged prompt from style key (default + style)
     merged_prompt = build_prompt(prompt)
+    logger.info(f"📝 [/jobs] style_key={prompt!r} → merged prompt ({len(merged_prompt)} chars):\n{merged_prompt[:500]}...")
 
     # Create job in database
     job = Job(
@@ -1116,6 +1117,7 @@ async def mobile_enhance(
 
     # Build merged prompt from style key (default + style)
     merged_prompt = build_prompt(style)
+    logger.info(f"📝 [mobile/enhance] style_key={style!r} → merged prompt ({len(merged_prompt)} chars):\n{merged_prompt[:500]}...")
 
     job = Job(
         asset_id=asset.id,
@@ -1284,6 +1286,7 @@ async def mobile_enhance_base64(
 
     # Build merged prompt from style key (default + style)
     merged_prompt = build_prompt(body.style)
+    logger.info(f"📝 [mobile/enhance-formdata] style_key={body.style!r} → merged prompt ({len(merged_prompt)} chars):\n{merged_prompt[:500]}...")
 
     job = Job(
         asset_id=asset.id,

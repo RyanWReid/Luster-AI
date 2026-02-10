@@ -259,6 +259,11 @@ class Worker:
             print(f"  - Temp output path: {temp_output_path}")
 
             # Process the image
+            prompt_text = job.prompt or ""
+            print(f"\n📝 Full prompt being sent to OpenAI ({len(prompt_text)} chars):")
+            print(f"--- PROMPT START ---")
+            print(prompt_text)
+            print(f"--- PROMPT END ---")
             print(f"\nCalling image processor...")
             result = self.processor.process_image(
                 input_path=input_file_path,
