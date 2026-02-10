@@ -34,8 +34,6 @@ from revenue_cat import router as revenuecat_router
 from schemas import validate_uuid
 
 # Prompt loader — single source of truth
-import sys as _sys
-_sys.path.insert(0, str(Path(__file__).parent.parent.parent / "packages" / "shared"))
 from prompt_loader import build_prompt, get_available_styles
 
 # Import R2 client for presigned URLs
