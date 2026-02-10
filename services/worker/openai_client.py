@@ -57,7 +57,7 @@ class LusterOpenAIClient:
             for attempt in range(max_retries):
                 try:
                     with open(image_path, "rb") as image_file:
-                        edit_params = dict(
+                        response = self.client.images.edit(
                             model="gpt-image-1.5",
                             image=image_file,
                             prompt=prompt,
@@ -65,14 +65,6 @@ class LusterOpenAIClient:
                             quality=quality,
                             n=1,
                         )
-                        try:
-                            response = self.client.images.edit(
-                                **edit_params, input_fidelity="high"
-                            )
-                        except TypeError:
-                            logger.warning("input_fidelity not supported, retrying without it")
-                            image_file.seek(0)
-                            response = self.client.images.edit(**edit_params)
 
                     if response.data and len(response.data) > 0:
                         image_data = None
