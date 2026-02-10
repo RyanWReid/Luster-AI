@@ -1,8 +1,7 @@
-Goal
-Upgrade this interior photo into a luxury-grade, editorial real estate image.
-Apply the lighting, color, and exposure style described below. Make the style adjustments clearly visible — the result should look professionally color-graded and lit, not identical to the original.
-Remove clutter and clean surfaces as described below.
-Preserve architecture, layout, furnishings, and materials exactly.
+Identity Lock
+This is a real interior photograph of a real space. Preserve it with absolute fidelity.
+Change only: lighting quality, color balance, exposure, and surface cleanliness.
+Keep everything else identical to the source image.
 
 Preservation Rules
 Preserve the exact room layout, architecture, and spatial geometry.

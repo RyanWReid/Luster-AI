@@ -42,7 +42,7 @@ def build_prompt(style: str = DEFAULT_STYLE) -> str:
     default_text = _read(PROMPTS_DIR / "default.md")
     style_text = _read(PROMPTS_DIR / "styles" / f"style_{style}.md")
 
-    return f"{default_text}\n\n{style_text}"
+    return f"{style_text}\n\n{default_text}"
 
 
 def get_available_styles() -> dict[str, str]:
