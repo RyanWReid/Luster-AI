@@ -115,7 +115,7 @@ export default function ConfirmationScreen() {
   const navigation = useNavigation()
   const route = useRoute()
   const { selectedPhotos } = usePhotos()
-  const { addListing, listings } = useListings()
+  const { addListing, updateListing, listings } = useListings()
   const { credits } = useAuth()
   const currentStep = 3
   const [isChecking, setIsChecking] = useState(false)
@@ -130,8 +130,8 @@ export default function ConfirmationScreen() {
 
   // Get data from previous screens
   const params = route.params as any
-  const selectedStyle = params?.style || 'Natural'
-  const backendStyle = params?.backendStyle || 'flambient'
+  const selectedStyle = params?.style || 'Neutral'
+  const backendStyle = params?.backendStyle || 'neutral'
 
   // Selected project from ProjectSelectionScreen (null = new project)
   const selectedProjectId = params?.selectedProjectId ?? null
@@ -143,6 +143,7 @@ export default function ConfirmationScreen() {
   const existingEnhanced = params?.existingEnhanced ?? []
   const originalPhotos = params?.originalPhotos ?? []
   const photosToProcess = params?.photosToProcess ?? selectedPhotos
+  const tempListingId = params?.tempListingId ?? null
 
   // Photo count depends on mode
   const photoCount = isRegeneration ? (params?.photoCount ?? 1) : (selectedPhotos.length || 1)
@@ -287,33 +288,21 @@ export default function ConfirmationScreen() {
 
     hapticFeedback.medium()
 
-    // Handle regeneration mode
-    if (isRegeneration && parentPropertyId) {
-      // Create temp project for regeneration
-      const tempProjectId = addListing({
-        address: `Regenerating ${photoCount} photo${photoCount > 1 ? 's' : ''}...`,
-        price: '$---,---',
-        beds: 0,
-        baths: 0,
-        image: photosToProcess[0] ? { uri: photosToProcess[0] } : require('../../assets/photo.png'),
-        images: [],
-        originalImages: photosToProcess.map((uri: string) => ({ uri })),
-        isEnhanced: false,
-        status: 'processing',
-      })
-
-      console.log('ConfirmationScreen: Regeneration mode')
+    // Handle regeneration mode — use temp listing (parent already saved as completed by ResultScreen)
+    if (isRegeneration && tempListingId) {
+      console.log('ConfirmationScreen: Regeneration mode (temp card pattern)')
+      console.log('  - Temp listing:', tempListingId)
       console.log('  - Parent project:', parentPropertyId)
-      console.log('  - Temp project:', tempProjectId)
       console.log('  - Regen indices:', regenIndices)
 
       hasConfirmed.current = true
 
-      // Navigate to Processing with regeneration params
+      // Navigate to Processing using the temp listing ID
       navigation.replace('Processing' as never, {
         isRegeneration: true,
-        propertyId: tempProjectId,
+        propertyId: tempListingId,
         parentPropertyId: parentPropertyId,
+        tempListingId: tempListingId,
         style: backendStyle,
         photos: photosToProcess,
         regenIndices: regenIndices,

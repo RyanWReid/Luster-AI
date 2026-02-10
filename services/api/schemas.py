@@ -221,9 +221,8 @@ class Base64ImageRequest(BaseModel):
         description="Base64 encoded image data",
     )
     style: str = Field(
-        default="luster",
+        default="neutral",
         description="Enhancement style",
-        pattern=r"^(luster|flambient)$",
     )
     project_name: str | None = Field(
         default=None,
@@ -234,6 +233,14 @@ class Base64ImageRequest(BaseModel):
         default=None,
         description="Existing shoot ID (to add photos to existing project)",
     )
+
+    @field_validator("style")
+    @classmethod
+    def validate_style(cls, v: str) -> str:
+        from prompt_loader import VALID_STYLES
+        if v not in VALID_STYLES:
+            raise ValueError(f"Style must be one of: {', '.join(sorted(VALID_STYLES))}")
+        return v
 
     @field_validator("shoot_id")
     @classmethod

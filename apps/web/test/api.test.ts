@@ -104,7 +104,7 @@ describe('API Client', () => {
         headers: { get: () => 'application/json' },
       })
 
-      const result = await jobsApi.createEnhanced('asset-123', 'Default_Interior', 'premium')
+      const result = await jobsApi.createEnhanced('asset-123', 'neutral', 'premium')
       
       expect(mockFetch).toHaveBeenCalledWith(
         'http://localhost:8000/jobs',

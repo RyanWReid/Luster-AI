@@ -17,17 +17,19 @@ import * as ImagePicker from 'expo-image-picker'
 import { useAuth } from '../context/AuthContext'
 import enhancementService from '../services/enhancementService'
 import { useErrorHandler } from '../hooks/useErrorHandler'
+import type { EnhancementStyle } from '../types'
 
 const STYLE_PRESETS = [
-  { id: 'luster', name: 'Luster', icon: 'sparkles' },
-  { id: 'flambient', name: 'Flambient', icon: 'sunny' },
+  { id: 'neutral', name: 'Neutral', icon: 'sparkles' },
+  { id: 'bright', name: 'Bright', icon: 'sunny' },
+  { id: 'warm', name: 'Warm', icon: 'flame' },
 ]
 
 export default function HomeScreen() {
   const { credits, refreshCredits, synced } = useAuth()
   const { handleError } = useErrorHandler()
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
-  const [selectedStyle, setSelectedStyle] = useState<string>('luster')
+  const [selectedStyle, setSelectedStyle] = useState<string>('neutral')
   const [processing, setProcessing] = useState(false)
   const [enhancedImageUrl, setEnhancedImageUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -113,7 +115,7 @@ export default function HomeScreen() {
       // Start enhancement job - sends image to backend which processes and stores output in R2
       const enhanceResult = await enhancementService.enhanceImage({
         imageUrl: selectedImage,
-        style: selectedStyle as 'luster' | 'flambient',
+        style: selectedStyle as EnhancementStyle,
       })
 
       // Poll for completion

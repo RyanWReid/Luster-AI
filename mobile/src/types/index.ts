@@ -10,19 +10,19 @@
 /**
  * Display style names shown to users in the mobile app
  */
-export type DisplayStyle = 'Natural' | 'Warm' | 'Luster'
+export type DisplayStyle = 'Neutral' | 'Bright' | 'Warm' | 'Evening' | 'Noir' | 'Soft'
 
 /**
  * Valid enhancement styles supported by the backend API
- * Maps: Natural -> flambient, Warm -> warm, Luster -> luster
+ * Maps: Neutral -> neutral, Bright -> bright, Warm -> warm
  */
-export type EnhancementStyle = 'luster' | 'flambient' | 'warm'
+export type EnhancementStyle = 'neutral' | 'bright' | 'warm' | 'evening' | 'noir' | 'soft'
 
 /**
  * Type guard to validate enhancement style
  */
 export function isValidStyle(style: unknown): style is EnhancementStyle {
-  return style === 'luster' || style === 'flambient' || style === 'warm'
+  return style === 'neutral' || style === 'bright' || style === 'warm' || style === 'evening' || style === 'noir' || style === 'soft'
 }
 
 // =============================================================================
@@ -88,6 +88,11 @@ export interface PropertyListing {
   status: PropertyStatus
   error?: string
   createdAt: Date
+  // Temp regen card fields (visual-only card, no backend data)
+  isTemporary?: boolean
+  parentListingId?: string
+  regenIndices?: number[]
+  regenResults?: string[]
 }
 
 // =============================================================================
@@ -112,8 +117,8 @@ export type RootStackParamList = {
     photos?: Photo[]
   }
   Confirmation: {
-    style: DisplayStyle        // Display name for UI (Natural, Warm, Luster)
-    backendStyle: EnhancementStyle  // Backend API style (flambient, warm, luster)
+    style: DisplayStyle        // Display name for UI (Neutral, Bright, Warm)
+    backendStyle: EnhancementStyle  // Backend API style (neutral, bright, warm)
     photoCount: number
     selectedProjectId?: string | null  // null = new project, string = existing project ID
     // Regeneration-specific params (optional)
@@ -123,6 +128,7 @@ export type RootStackParamList = {
     existingEnhanced?: string[]     // Existing enhanced photos
     originalPhotos?: string[]       // Full array of original photos
     photosToProcess?: string[]      // Photos to actually process (for regen, just selected ones)
+    tempListingId?: string          // Temp card ID for regen flow
   }
   ProjectSelection: {
     // Pass through all Confirmation params so we can return with selection
@@ -146,6 +152,7 @@ export type RootStackParamList = {
     // Add to existing project params
     isAddingToProject?: boolean
     existingOriginals?: string[]   // Original photos from parent project
+    tempListingId?: string          // Temp card ID for regen flow
   }
   Result: {
     propertyId?: string

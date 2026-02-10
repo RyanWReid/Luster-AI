@@ -72,8 +72,8 @@ const StepIndicator = ({ currentStep, totalSteps }: StepIndicatorProps) => {
   )
 }
 
-type StyleOption = 'Natural' | 'Warm' | 'Luster'
-type BackendStyle = 'flambient' | 'warm' | 'luster'
+type StyleOption = 'Neutral' | 'Bright' | 'Warm' | 'Evening' | 'Noir' | 'Soft'
+type BackendStyle = 'neutral' | 'bright' | 'warm' | 'evening' | 'noir' | 'soft'
 
 interface StyleCardProps {
   title: StyleOption
@@ -200,12 +200,15 @@ export default function StyleSelectionScreen() {
     ).start()
   }, [])
 
-  // Three distinct style options with unique thumbnails
-  // Maps to backend styles: natural->flambient, warm->warm, clean->luster
+  // Style options with unique thumbnails
+  // Maps to backend styles: neutral, bright, warm, evening, noir, soft
   const styleOptions = [
-    { title: 'Natural' as StyleOption, image: require('../../assets/thumbnails/old/natural-thumbnail.png'), backendStyle: 'flambient' },
-    { title: 'Warm' as StyleOption, image: require('../../assets/thumbnails/old/warm-thumbnail.png'), backendStyle: 'warm' },
-    { title: 'Luster' as StyleOption, image: require('../../assets/thumbnails/old/clean-thumbnail.png'), backendStyle: 'luster' },
+    { title: 'Neutral' as StyleOption, image: require('../../assets/thumbnails/Neutral.png'), backendStyle: 'neutral' as BackendStyle },
+    { title: 'Bright' as StyleOption, image: require('../../assets/thumbnails/Bright.png'), backendStyle: 'bright' as BackendStyle },
+    { title: 'Warm' as StyleOption, image: require('../../assets/thumbnails/Warm.png'), backendStyle: 'warm' as BackendStyle },
+    { title: 'Evening' as StyleOption, image: require('../../assets/thumbnails/Evening.png'), backendStyle: 'evening' as BackendStyle },
+    { title: 'Noir' as StyleOption, image: require('../../assets/thumbnails/Noir.png'), backendStyle: 'noir' as BackendStyle },
+    { title: 'Soft' as StyleOption, image: require('../../assets/thumbnails/Cozy.png'), backendStyle: 'soft' as BackendStyle },
   ]
 
   const handleClose = () => {

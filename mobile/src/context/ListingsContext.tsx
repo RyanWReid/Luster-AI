@@ -11,12 +11,13 @@ const STORAGE_KEY = '@luster_listings'
 
 interface ListingsContextType {
   listings: PropertyListing[]
-  addListing: (listing: Omit<PropertyListing, 'id' | 'createdAt'>) => void
+  addListing: (listing: Omit<PropertyListing, 'id' | 'createdAt'>) => string
   updateListing: (id: string, updates: Partial<PropertyListing>) => void
   updateListingName: (id: string, newName: string) => void
   removeListing: (id: string) => Promise<void>
   clearListings: () => Promise<void>
   syncFromBackend: () => Promise<void>
+  mergeRegenResults: (tempListingId: string) => boolean
   isLoading: boolean
   isSyncing: boolean
   isProcessing: (id: string) => boolean
@@ -172,6 +173,54 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
     setListings([])
   }
 
+  const mergeRegenResults = (tempListingId: string): boolean => {
+    const tempListing = listings.find(l => l.id === tempListingId)
+    if (!tempListing || !tempListing.isTemporary || !tempListing.parentListingId) {
+      console.warn('mergeRegenResults: Invalid temp listing', tempListingId)
+      return false
+    }
+
+    const parentListing = listings.find(l => l.id === tempListing.parentListingId)
+    if (!parentListing) {
+      console.warn('mergeRegenResults: Parent listing not found', tempListing.parentListingId)
+      return false
+    }
+
+    const { regenIndices, regenResults } = tempListing
+    if (!regenIndices || !regenResults || regenResults.length === 0) {
+      console.warn('mergeRegenResults: No regen results to merge')
+      return false
+    }
+
+    // Copy parent's images array and replace at regen indices
+    const mergedImages = [...(parentListing.images || [])]
+    regenIndices.forEach((originalIndex, resultIndex) => {
+      if (resultIndex < regenResults.length) {
+        mergedImages[originalIndex] = { uri: regenResults[resultIndex] }
+      }
+    })
+
+    // Update parent with merged images
+    setListings(prev => prev
+      .map(l => {
+        if (l.id === tempListing.parentListingId) {
+          return {
+            ...l,
+            images: mergedImages,
+            image: mergedImages[0] || l.image,
+            status: 'completed' as PropertyStatus,
+          }
+        }
+        return l
+      })
+      // Remove temp listing (local only — no backend call since no backendShootId)
+      .filter(l => l.id !== tempListingId)
+    )
+
+    console.log(`✅ Merged regen results into parent ${tempListing.parentListingId}, removed temp ${tempListingId}`)
+    return true
+  }
+
   const syncFromBackend = useCallback(async (replaceAll: boolean = false) => {
     // Prevent concurrent syncs (race condition)
     if (syncInProgressRef.current) {
@@ -239,6 +288,9 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
 
             // Update existing local listings with backend data (images, status)
             const updatedLocal = prev.map(local => {
+              // Skip temp listings — they have no backend data
+              if (local.isTemporary) return local
+
               if (local.backendShootId) {
                 const backend = backendListings.find(b => b.id === local.backendShootId)
                 if (backend) {
@@ -327,6 +379,7 @@ export function ListingsProvider({ children }: { children: ReactNode }) {
         removeListing,
         clearListings,
         syncFromBackend,
+        mergeRegenResults,
         isLoading,
         isSyncing,
         isProcessing,

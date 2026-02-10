@@ -162,6 +162,7 @@ export default function FloatingTabBar({ state, descriptors, navigation }: TabBa
                     source={starLogo}
                     style={styles.enhanceLogo}
                     contentFit="contain"
+                    placeholderColor="transparent"
                   />
                   {/* Shine overlay animation */}
                   <Animated.View

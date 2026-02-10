@@ -13,7 +13,7 @@ export class InsufficientCreditsError extends Error {
 
 interface EnhanceImageParams {
   imageUrl: string
-  style: 'luster' | 'flambient'
+  style: 'neutral' | 'bright' | 'warm'
   projectName?: string  // Name for new project (auto-generated if not provided)
   shootId?: string      // Existing shoot ID (to add photos to existing project)
   creditCost?: number   // Credit cost per photo (default 1, for flexible pricing)
@@ -405,14 +405,19 @@ class EnhancementService {
       // Return default styles as fallback
       return [
         {
-          id: 'luster',
-          name: 'Luster',
-          description: 'Luster AI signature style - luxury editorial real estate photography'
+          id: 'neutral',
+          name: 'Neutral',
+          description: 'Natural daylight enhancement with balanced tones'
         },
         {
-          id: 'flambient',
-          name: 'Flambient',
-          description: 'Bright, airy interior with crisp whites and flambient lighting'
+          id: 'bright',
+          name: 'Bright',
+          description: 'Cool-neutral crisp whites with micro-contrast boost'
+        },
+        {
+          id: 'warm',
+          name: 'Warm',
+          description: 'Cozy editorial warmth with rich midtones'
         }
       ]
     }
@@ -422,8 +427,8 @@ class EnhancementService {
    * Process multiple images with the same style
    */
   async enhanceMultipleImages(
-    imageUrls: string[], 
-    style: 'luster' | 'flambient',
+    imageUrls: string[],
+    style: 'neutral' | 'bright' | 'warm',
     onProgress?: (completed: number, total: number, currentStatus: string) => void
   ): Promise<string[]> {
     const enhancedUrls: string[] = []

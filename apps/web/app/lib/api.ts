@@ -143,7 +143,7 @@ export const jobsApi = {
   ): Promise<Job> => {
     const formData = new FormData()
     formData.append('asset_id', assetId)
-    formData.append('prompt', promptName) // Use prompt name like "Default_Interior"
+    formData.append('prompt', promptName) // Style key: "neutral", "bright", or "warm"
     formData.append('tier', tier)
     
     return apiRequest('/jobs', {

@@ -23,7 +23,7 @@ import creditService from '../services/creditService'
 import { api } from '../lib/api'
 import hapticFeedback from '../utils/haptics'
 import { useErrorHandler } from '../hooks/useErrorHandler'
-import { RootStackParamList, isValidStyle } from '../types'
+import { RootStackParamList, isValidStyle, EnhancementStyle } from '../types'
 
 const { width } = Dimensions.get('window')
 
@@ -89,7 +89,7 @@ export default function ProcessingScreen() {
   const params = route.params as RootStackParamList['Processing'] | undefined
   const existingPropertyId = params?.propertyId ?? null
   const rawStyle = params?.style
-  const style = isValidStyle(rawStyle) ? rawStyle : 'luster' // Validate style with type guard
+  const style = isValidStyle(rawStyle) ? rawStyle : 'neutral' // Validate style with type guard
   const photos = params?.photos ?? selectedPhotos
   const photoCount = params?.photoCount ?? photos.length
   const creditPerPhoto = params?.creditPerPhoto ?? 2 // Default to 2 credits per photo
@@ -105,6 +105,9 @@ export default function ProcessingScreen() {
   const isAddingToProject = params?.isAddingToProject ?? false
   const existingOriginals = params?.existingOriginals ?? []
 
+  // Temp card regen flow
+  const tempListingId = params?.tempListingId ?? null
+
   // State for tracking progress
   const [processedCount, setProcessedCount] = useState(0)
   const [currentStatus, setCurrentStatus] = useState(params?.isRegeneration ? 'Regenerating selected photos...' : 'Enhancing your photos...')
@@ -117,6 +120,7 @@ export default function ProcessingScreen() {
   // Use ref to track processing state (doesn't trigger re-renders)
   const hasStartedProcessing = useRef(false)
   const startTimeRef = useRef<number>(Date.now())
+  const isMountedRef = useRef(true)
 
   // Animation refs
   const fadeAnim = useRef(new Animated.Value(0)).current
@@ -224,6 +228,11 @@ export default function ProcessingScreen() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
+  // Clean up mounted ref on unmount
+  useEffect(() => {
+    return () => { isMountedRef.current = false }
+  }, [])
+
   // Poll for active jobs (used when returning to screen)
   const pollActiveJobs = async (currentPropertyId: string) => {
     console.log('ProcessingScreen: Starting to poll for active jobs...')
@@ -233,12 +242,21 @@ export default function ProcessingScreen() {
     const maxPolls = 200 // ~10 minutes max
 
     for (let i = 0; i < maxPolls; i++) {
+      // Stop polling if component unmounted (user backed out)
+      if (!isMountedRef.current) {
+        console.log('ProcessingScreen: Unmounted during poll, stopping without status change')
+        return
+      }
+
       try {
         const response = await api.get<{
           has_active: boolean
           active_count: number
           jobs: Array<{ id: string; status: string }>
         }>('/jobs/active')
+
+        // Check again after async call
+        if (!isMountedRef.current) return
 
         console.log(`Poll ${i + 1}: Active jobs =`, response.active_count)
 
@@ -250,6 +268,7 @@ export default function ProcessingScreen() {
           if (!listing?.backendShootId) {
             // Job was never created - likely crashed before upload completed
             console.log('ProcessingScreen: No active jobs and no backendShootId - job creation failed')
+            if (!isMountedRef.current) return
             hapticFeedback.notification('error')
 
             if (listing) {
@@ -269,6 +288,7 @@ export default function ProcessingScreen() {
 
           // Job was created - all jobs completed, navigate to results
           console.log('ProcessingScreen: All jobs completed, navigating to results')
+          if (!isMountedRef.current) return
           hapticFeedback.notification('success')
 
           // Refresh credits
@@ -307,11 +327,13 @@ export default function ProcessingScreen() {
         await new Promise(resolve => setTimeout(resolve, pollInterval))
       } catch (error) {
         console.error('Poll error:', error)
+        if (!isMountedRef.current) return
         await new Promise(resolve => setTimeout(resolve, pollInterval))
       }
     }
 
     // Timeout - show error
+    if (!isMountedRef.current) return
     console.error('ProcessingScreen: Polling timeout')
     hapticFeedback.notification('error')
     Alert.alert('Processing Timeout', 'Your photos are still being processed. Check back in a moment.')
@@ -325,10 +347,8 @@ export default function ProcessingScreen() {
       return
     }
 
-    let isMounted = true
-
     async function processImages() {
-      if (!isMounted) return
+      if (!isMountedRef.current) return
       try {
         // Only create property if we don't have an existing one
         // NOTE: This fallback should rarely trigger - ConfirmationScreen creates the property
@@ -413,7 +433,7 @@ export default function ProcessingScreen() {
             // First photo creates new project, subsequent photos use same shoot_id
             const enhanceResult = await enhancementService.enhanceImage({
               imageUrl: photos[i],
-              style: style as 'luster' | 'flambient',
+              style: style as EnhancementStyle,
               projectName: i === 0 ? projectName : undefined,  // Only first photo sets name
               shootId: shootId || undefined,  // Use existing shoot for subsequent photos
               creditCost: creditPerPhoto,  // Pass credit cost from confirmation screen
@@ -535,39 +555,40 @@ export default function ProcessingScreen() {
         let finalOriginalPhotos = photos
         let finalPropertyId = currentPropertyId
 
-        if (isRegeneration && existingEnhanced.length > 0) {
-          // REGENERATION: Replace photos at specific indices
+        if (isRegeneration && tempListingId) {
+          // REGENERATION (temp card pattern): Store results on temp listing, navigate to Main
+          console.log('Regeneration complete (temp card pattern):')
+          console.log('  - Temp listing:', tempListingId)
+          console.log('  - Regenerated indices:', regenIndices)
+          console.log('  - Results count:', results.length)
+
+          // Store regen results on the temp listing and mark as ready
+          updateListing(tempListingId, {
+            regenResults: results,
+            status: 'ready',
+          })
+
+          // Navigate to Main (dashboard) — user will tap the temp card to merge
+          navigation.navigate('Main' as never)
+          return
+        } else if (isRegeneration && existingEnhanced.length > 0) {
+          // Legacy fallback: in-place regen (no temp listing)
           finalEnhancedPhotos = [...existingEnhanced]
 
-          // Replace photos at regenerated indices with new results
           regenIndices.forEach((originalIndex, resultIndex) => {
             if (resultIndex < results.length) {
               finalEnhancedPhotos[originalIndex] = results[resultIndex]
             }
           })
 
-          // Use the full original photos array
           finalOriginalPhotos = originalPhotos
 
-          console.log('Regeneration complete:')
-          console.log('  - Regenerated indices:', regenIndices)
-          console.log('  - Final enhanced photos:', finalEnhancedPhotos.length)
-
-          // Merge back into parent project and delete temp
-          if (parentPropertyId) {
-            console.log('Merging results back into parent project:', parentPropertyId)
-
-            updateListing(parentPropertyId, {
+          if (currentPropertyId) {
+            updateListing(currentPropertyId, {
               images: finalEnhancedPhotos.map((uri: string) => ({ uri })),
               status: 'completed',
             })
-
-            if (currentPropertyId) {
-              console.log('Removing temp regen project:', currentPropertyId)
-              removeListing(currentPropertyId)
-            }
-
-            finalPropertyId = parentPropertyId
+            finalPropertyId = currentPropertyId
           }
         } else if (isAddingToProject && parentPropertyId) {
           // ADDING TO PROJECT: Append new photos to existing
@@ -641,7 +662,6 @@ export default function ProcessingScreen() {
     }, 500)
 
     return () => {
-      isMounted = false
       clearTimeout(timer)
     }
   }, []) // Empty dependency array - only run once on mount

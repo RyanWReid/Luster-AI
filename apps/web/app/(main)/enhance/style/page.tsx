@@ -18,25 +18,61 @@ import {
 } from 'lucide-react'
 import type { StylePreset, UserPlan } from '@/app/types'
 
-// Available style presets - only options with backend implementations
+// Available style presets — keys must match backend VALID_STYLES
 const stylePresets: StylePreset[] = [
   {
-    id: 'Default_Interior',
-    name: 'Default Enhancement',
-    description: 'Professional editorial real estate photography with balanced lighting and authentic staging',
-    prompt: 'Default_Interior',
-    preview_image: '/styles/default.jpg',
+    id: 'neutral',
+    name: 'Neutral',
+    description: 'Natural daylight enhancement with balanced tones and gentle contrast',
+    prompt: 'neutral',
+    preview_image: '/styles/neutral.png',
     category: 'enhancement',
-    tags: ['professional', 'editorial', 'balanced']
+    tags: ['natural', 'balanced', 'clean']
   },
   {
-    id: 'Flambient_Interior',
-    name: 'Bright & Airy',
-    description: 'Bright, airy interior with crisp whites and flambient lighting for a spacious feel',
-    prompt: 'Flambient_Interior', 
-    preview_image: '/styles/flambient.jpg',
+    id: 'bright',
+    name: 'Bright',
+    description: 'Cool-neutral crisp whites with micro-contrast boost for a modern feel',
+    prompt: 'bright',
+    preview_image: '/styles/bright.png',
     category: 'enhancement',
-    tags: ['bright', 'airy', 'spacious']
+    tags: ['bright', 'crisp', 'modern']
+  },
+  {
+    id: 'warm',
+    name: 'Warm',
+    description: 'Cozy editorial warmth with rich midtones and inviting atmosphere',
+    prompt: 'warm',
+    preview_image: '/styles/warm.png',
+    category: 'enhancement',
+    tags: ['warm', 'cozy', 'inviting']
+  },
+  {
+    id: 'evening',
+    name: 'Evening',
+    description: 'Tungsten-balanced twilight mood with controlled warmth and soft ambient glow',
+    prompt: 'evening',
+    preview_image: '/styles/evening.png',
+    category: 'enhancement',
+    tags: ['twilight', 'ambient', 'moody']
+  },
+  {
+    id: 'noir',
+    name: 'Noir',
+    description: 'Deep dramatic shadows with luxe contrast and rich directional light',
+    prompt: 'noir',
+    preview_image: '/styles/noir.png',
+    category: 'enhancement',
+    tags: ['dramatic', 'luxe', 'deep']
+  },
+  {
+    id: 'soft',
+    name: 'Soft',
+    description: 'Gentle highlight roll-off with calm tones and an understated elegant feel',
+    prompt: 'soft',
+    preview_image: '/styles/soft.png',
+    category: 'enhancement',
+    tags: ['gentle', 'elegant', 'calm']
   }
 ]
 
@@ -200,7 +236,7 @@ function StyleSelection({}: StyleSelectionProps) {
           )}
 
           {/* Style Options */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredStyles.map((style) => {
               const isSelected = selectedStyle?.id === style.id
               const Icon = getCategoryIcon(style.category)

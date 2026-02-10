@@ -33,26 +33,10 @@ from rate_limiter import RATE_LIMITS, limiter, rate_limit_exceeded_handler
 from revenue_cat import router as revenuecat_router
 from schemas import validate_uuid
 
-# Style prompts for image enhancement
-style_prompts = {
-    "luster": """Transform this interior photo into a photorealistic, luxury-grade real estate image.
-Balance realism with natural texture and authentic light flow. Output must be MLS-ready.
-Preserve all architectural features, furniture positions, and material textures.
-Remove clutter (cables, papers, toiletries) but never add furniture or staging items.
-All screens must be OFF. No HDR halos or artificial lighting effects.""",
-    "flambient": """Transform this interior photo into a bright, airy real estate image with crisp neutral whites.
-Use professional flambient lighting technique for spacious, inviting feel.
-White balance ~5200K daylight. Lift ceilings and walls +0.2-0.3 EV for airy feel.
-Preserve wood warmth without color cast onto whites. Remove clutter only.
-No furniture additions. All screens OFF. No HDR artifacts.""",
-    "warm": """Transform this interior photo into a warm, inviting real estate image with cozy golden tones.
-Color temperature 4500-5000K with subtle golden undertones. Not orange, just cozy.
-Preserve wood warmth in floors and cabinets. Remove clutter only.
-No furniture additions or staging. All screens OFF. No HDR artifacts.""",
-    "dusk": "Transform this real estate photo with warm dusk lighting, golden hour ambiance while maintaining architectural accuracy.",
-    "sky_replacement": "Enhance this real estate photo with a beautiful clear blue sky while preserving all architectural details.",
-    "lawn_cleanup": "Clean up and enhance the landscaping, making grass greener and more manicured while keeping all hardscaping authentic.",
-}
+# Prompt loader — single source of truth
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).parent.parent.parent / "packages" / "shared"))
+from prompt_loader import build_prompt, get_available_styles
 
 # Import R2 client for presigned URLs
 try:
@@ -175,7 +159,7 @@ class Base64ImageRequest(BaseModel):
     """Request schema for base64 image upload with validation."""
 
     image: str  # Base64 encoded image
-    style: str = "luster"
+    style: str = "neutral"
     project_name: Optional[str] = None
     shoot_id: Optional[str] = None
     credit_cost: int = 2  # Credit cost per photo
@@ -190,9 +174,9 @@ class Base64ImageRequest(BaseModel):
     @field_validator("style")
     @classmethod
     def validate_style(cls, v: str) -> str:
-        allowed = {"luster", "flambient"}
-        if v not in allowed:
-            raise ValueError(f"Style must be one of: {', '.join(allowed)}")
+        from prompt_loader import VALID_STYLES
+        if v not in VALID_STYLES:
+            raise ValueError(f"Style must be one of: {', '.join(sorted(VALID_STYLES))}")
         return v
 
     @field_validator("shoot_id")
@@ -587,11 +571,14 @@ def create_job(
     credit.balance -= credits_used
     db.flush()
 
+    # Build merged prompt from style key (default + style)
+    merged_prompt = build_prompt(prompt)
+
     # Create job in database
     job = Job(
         asset_id=asset_id,
         user_id=user.id,
-        prompt=prompt,
+        prompt=merged_prompt,
         status=JobStatus.queued,
         credits_used=credits_used,
     )
@@ -603,7 +590,7 @@ def create_job(
         job_id=job.id,
         event_type="created",
         details=json.dumps(
-            {"prompt": prompt, "tier": tier, "credits_used": credits_used}
+            {"style": prompt, "tier": tier, "credits_used": credits_used}
         ),
     )
     db.add(event)
@@ -966,7 +953,7 @@ def mobile_test():
 async def mobile_enhance(
     request: Request,
     image: UploadFile = File(...),
-    style: str = Form("luster"),
+    style: str = Form("neutral"),
     shoot_id: Optional[str] = Form(None),
     project_name: Optional[str] = Form(None),
     credit_cost: int = Form(2),  # Credit cost per photo
@@ -974,6 +961,14 @@ async def mobile_enhance(
     user: User = Depends(get_current_user),
 ):
     """Mobile endpoint to start image enhancement (rate limited: 10/minute)"""
+
+    # Validate style against prompt_loader's VALID_STYLES
+    from prompt_loader import VALID_STYLES
+    if style not in VALID_STYLES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Invalid style '{style}'. Must be one of: {', '.join(sorted(VALID_STYLES))}"
+        )
 
     print(f"\n=== MOBILE ENHANCE DEBUG ===")
     print(f"Style: {style}")
@@ -1121,13 +1116,13 @@ async def mobile_enhance(
     credit.balance -= credit_cost
     db.flush()
 
-    # Create job with style prompt
-    prompt = style_prompts.get(style, style_prompts["luster"])
+    # Build merged prompt from style key (default + style)
+    merged_prompt = build_prompt(style)
 
     job = Job(
         asset_id=asset.id,
         user_id=user.id,
-        prompt=prompt,
+        prompt=merged_prompt,
         status=JobStatus.queued,
         credits_used=credit_cost,
     )
@@ -1289,13 +1284,13 @@ async def mobile_enhance_base64(
     credit.balance -= body.credit_cost
     db.flush()
 
-    # Create job with style prompt
-    prompt = style_prompts.get(body.style, style_prompts["luster"])
+    # Build merged prompt from style key (default + style)
+    merged_prompt = build_prompt(body.style)
 
     job = Job(
         asset_id=asset.id,
         user_id=user.id,
-        prompt=prompt,
+        prompt=merged_prompt,
         status=JobStatus.queued,
         credits_used=body.credit_cost,
     )
@@ -1400,18 +1395,11 @@ def mobile_get_credits(
 @app.get("/api/mobile/styles")
 def mobile_get_styles():
     """Get available enhancement styles for mobile"""
+    styles = get_available_styles()
     return {
         "styles": [
-            {
-                "id": "luster",
-                "name": "Luster",
-                "description": "Luster AI signature style - luxury editorial real estate photography",
-            },
-            {
-                "id": "flambient",
-                "name": "Flambient",
-                "description": "Bright, airy interior with crisp whites and flambient lighting",
-            },
+            {"id": key, "name": name, "description": f"{name} enhancement style"}
+            for key, name in styles.items()
         ]
     }
 

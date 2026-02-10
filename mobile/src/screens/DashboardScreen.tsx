@@ -124,7 +124,7 @@ const mockProperties = [
 
 export default function DashboardScreenNew() {
   const navigation = useNavigation()
-  const { listings, isLoading: isLoadingListings, clearListings, syncFromBackend } = useListings()
+  const { listings, isLoading: isLoadingListings, clearListings, syncFromBackend, mergeRegenResults } = useListings()
   const { credits, refreshCredits } = useAuth()
   const showMockData = false // Toggle this to true to show mock data cards
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -292,6 +292,46 @@ export default function DashboardScreenNew() {
   }
 
   const handlePropertyPress = (item: any) => {
+    // Handle temp regen cards first
+    if (item.isTemporary) {
+      if (item.status === 'processing') {
+        // Still processing — navigate to ProcessingScreen
+        navigation.navigate('Processing' as never, {
+          propertyId: item.id,
+          photos: item.originalImages?.map((img: any) => img.uri) || [],
+          photoCount: item.originalImages?.length || 0,
+          isRegeneration: true,
+          tempListingId: item.id,
+          parentPropertyId: item.parentListingId,
+          regenIndices: item.regenIndices,
+        } as never)
+        return
+      }
+      if (item.status === 'ready') {
+        // Regen complete — merge results into parent and remove temp card
+        const success = mergeRegenResults(item.id)
+        if (success) {
+          hapticFeedback.notification('success')
+        } else {
+          hapticFeedback.notification('error')
+          Alert.alert('Merge Failed', 'Could not merge regenerated photos. Please try again.')
+        }
+        return
+      }
+      if (item.status === 'failed') {
+        // Failed regen — offer to delete
+        Alert.alert(
+          'Regeneration Failed',
+          item.error || 'An error occurred during regeneration.',
+          [
+            { text: 'OK', style: 'cancel' },
+          ]
+        )
+        return
+      }
+      return
+    }
+
     // Navigate based on property status
     if (item.status === 'failed') {
       // Property failed - show error and offer to retry or delete

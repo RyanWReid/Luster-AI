@@ -145,7 +145,7 @@ export default function ResultScreen() {
   const route = useRoute()
   const { selectedPhotos, enhancedPhotos } = usePhotos()
   const { credits } = useAuth()
-  const { updateListing } = useListings()
+  const { updateListing, addListing } = useListings()
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showingOriginal, setShowingOriginal] = useState(false)
 
@@ -164,7 +164,7 @@ export default function ResultScreen() {
   // Get enhanced photos from navigation params or context
   const params = route.params as RootStackParamList['Result'] | undefined
   const propertyId = params?.propertyId ?? null
-  const currentStyle = params?.style ?? 'luster'
+  const currentStyle = params?.style ?? 'neutral'
   const enhancedFromNav = params?.enhancedPhotos ?? enhancedPhotos ?? []
   const originalFromNav = params?.originalPhotos ?? selectedPhotos ?? []
 
@@ -298,60 +298,89 @@ export default function ResultScreen() {
     setSelectedForRegen(newSelection)
   }
 
-  // Handle regeneration of selected photos - navigate to Confirmation screen
+  // Handle regeneration of selected photos - show confirmation alert, create temp card, navigate
   const handleRegenerateSelected = () => {
     const selectedCount = selectedForRegen.size
     if (selectedCount === 0) return
 
     hapticFeedback.medium()
 
-    // Get the selected photos info
-    const regenIndices = Array.from(selectedForRegen)
-    const photosToRegen = regenIndices.map(i => originalFromNav[i])
+    Alert.alert(
+      'Regenerate Photos',
+      `We'll regenerate ${selectedCount} photo${selectedCount > 1 ? 's' : ''} and save the rest to your gallery. Proceed?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Proceed',
+          onPress: () => {
+            // Get the selected photos info
+            const regenIndices = Array.from(selectedForRegen)
+            const photosToRegen = regenIndices.map(i => originalFromNav[i])
 
-    // First save the current project (so user doesn't lose progress)
-    if (propertyId) {
-      const allEnhancedImages = enhancedFromNav
-        .filter((url: string) => url && url !== '')
-        .map((url: string) => ({ uri: url }))
-      const allOriginalImages = originalFromNav.map((url: string) => ({ uri: url }))
+            // Save parent project as completed (so user doesn't lose progress)
+            if (propertyId) {
+              const allEnhancedImages = enhancedFromNav
+                .filter((url: string) => url && url !== '')
+                .map((url: string) => ({ uri: url }))
+              const allOriginalImages = originalFromNav.map((url: string) => ({ uri: url }))
 
-      updateListing(propertyId, {
-        address: `${allEnhancedImages.length} Photos Enhanced`,
-        image: allEnhancedImages[0] || images[0].enhanced,
-        images: allEnhancedImages,
-        originalImages: allOriginalImages,
-        isEnhanced: true,
-        status: 'completed',
-      })
-      console.log('Saved parent project before regen:', propertyId)
-    }
+              updateListing(propertyId, {
+                address: `${allEnhancedImages.length} Photos Enhanced`,
+                image: allEnhancedImages[0] || images[0].enhanced,
+                images: allEnhancedImages,
+                originalImages: allOriginalImages,
+                isEnhanced: true,
+                status: 'completed',
+              })
+              console.log('Saved parent project before regen:', propertyId)
+            }
 
-    // Map backend style to display style for Confirmation screen
-    const styleDisplayMap: Record<string, string> = {
-      'luster': 'Luster',
-      'flambient': 'Natural',
-      'warm': 'Warm',
-    }
-    const displayStyle = styleDisplayMap[currentStyle] || 'Luster'
+            // Create temp listing (visual-only card, no backend data)
+            const tempId = addListing({
+              address: `Regenerating ${selectedCount} photo${selectedCount > 1 ? 's' : ''}...`,
+              price: '$---,---',
+              beds: 0,
+              baths: 0,
+              image: images[regenIndices[0]]?.enhanced || images[0].enhanced,
+              images: [],
+              originalImages: photosToRegen.map((uri: string) => ({ uri })),
+              isEnhanced: false,
+              status: 'processing',
+              isTemporary: true,
+              parentListingId: propertyId || undefined,
+              regenIndices: regenIndices,
+            })
+            console.log('Created temp regen listing:', tempId)
 
-    // Navigate to Confirmation screen with regeneration params
-    navigation.navigate('Confirmation' as never, {
-      style: displayStyle,
-      backendStyle: currentStyle,
-      photoCount: selectedCount,
-      // Regeneration-specific params
-      isRegeneration: true,
-      parentPropertyId: propertyId,
-      regenIndices: regenIndices,
-      existingEnhanced: enhancedFromNav,
-      originalPhotos: originalFromNav,
-      photosToProcess: photosToRegen,
-    } as never)
+            // Map backend style to display style for Confirmation screen
+            const styleDisplayMap: Record<string, string> = {
+              'neutral': 'Neutral',
+              'bright': 'Bright',
+              'warm': 'Warm',
+            }
+            const displayStyle = styleDisplayMap[currentStyle] || 'Neutral'
 
-    // Reset selection mode
-    setSelectionMode(false)
-    setSelectedForRegen(new Set())
+            // Navigate to Confirmation screen with regeneration params + tempListingId
+            navigation.navigate('Confirmation' as never, {
+              style: displayStyle,
+              backendStyle: currentStyle,
+              photoCount: selectedCount,
+              isRegeneration: true,
+              parentPropertyId: propertyId,
+              regenIndices: regenIndices,
+              existingEnhanced: enhancedFromNav,
+              originalPhotos: originalFromNav,
+              photosToProcess: photosToRegen,
+              tempListingId: tempId,
+            } as never)
+
+            // Reset selection mode
+            setSelectionMode(false)
+            setSelectedForRegen(new Set())
+          },
+        },
+      ]
+    )
   }
 
   // Legacy regenerate all (keeping for reference, but replaced by selection mode)
@@ -501,10 +530,7 @@ export default function ResultScreen() {
       <SafeAreaView style={styles.safeArea}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.scrollContent,
-            selectionMode && selectedForRegen.size > 0 && styles.scrollContentWithActionBar,
-          ]}
+          contentContainerStyle={styles.scrollContent}
         >
           {/* Header */}
           <Animated.View
@@ -557,11 +583,8 @@ export default function ResultScreen() {
 
                 <Text style={styles.headerTitle}>Results</Text>
 
-                <TouchableOpacity onPress={handleRegenerate} style={styles.headerButton}>
-                  <BlurView intensity={60} tint="light" style={styles.headerButtonBlur}>
-                    <SelectIcon />
-                  </BlurView>
-                </TouchableOpacity>
+                {/* Spacer to balance header layout */}
+                <View style={styles.headerButton} />
               </>
             )}
           </Animated.View>
@@ -661,7 +684,7 @@ export default function ResultScreen() {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Save Button */}
+          {/* Bottom Buttons */}
           <Animated.View
             style={[
               styles.saveSection,
@@ -670,56 +693,70 @@ export default function ResultScreen() {
               },
             ]}
           >
-            <TouchableOpacity
-              onPress={handleSaveAll}
-              activeOpacity={0.8}
-              style={styles.saveButtonTouchable}
-            >
-              <LinearGradient
-                colors={['#D4AF37', '#B8860B']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.saveButton}
-              >
-                <Text style={styles.saveButtonText}>Save to Gallery</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </Animated.View>
-        </ScrollView>
-
-        {/* Bottom Action Bar for Regeneration */}
-        {selectionMode && selectedForRegen.size > 0 && (
-          <Animated.View style={styles.regenActionBar}>
-            <BlurView intensity={90} tint="light" style={styles.regenActionBarBlur}>
-              <View style={styles.regenActionBarContent}>
-                <View style={styles.regenInfo}>
+            {selectionMode ? (
+              /* Selection mode: info + Regenerate N button */
+              <View style={styles.bottomButtonRow}>
+                <View style={styles.regenInfoInline}>
                   <Text style={styles.regenInfoText}>
-                    {selectedForRegen.size} photo{selectedForRegen.size > 1 ? 's' : ''} selected
+                    {selectedForRegen.size} photo{selectedForRegen.size !== 1 ? 's' : ''} selected
                   </Text>
                   <Text style={styles.regenCreditText}>
-                    {selectedForRegen.size} credit{selectedForRegen.size > 1 ? 's' : ''}
+                    {selectedForRegen.size} credit{selectedForRegen.size !== 1 ? 's' : ''}
                   </Text>
                 </View>
 
                 <TouchableOpacity
                   onPress={handleRegenerateSelected}
                   activeOpacity={0.8}
-                  style={styles.regenButton}
+                  style={[styles.regenButtonInline, selectedForRegen.size === 0 && { opacity: 0.5 }]}
+                  disabled={selectedForRegen.size === 0}
                 >
                   <LinearGradient
                     colors={['#D4AF37', '#B8860B']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={styles.regenButtonGradient}
+                    style={styles.regenButtonGradientInline}
                   >
                     <RefreshIconWhite />
-                    <Text style={styles.regenButtonText}>Regenerate</Text>
+                    <Text style={styles.regenButtonTextInline}>
+                      Regenerate{selectedForRegen.size > 0 ? ` ${selectedForRegen.size}` : ''}
+                    </Text>
                   </LinearGradient>
                 </TouchableOpacity>
               </View>
-            </BlurView>
+            ) : (
+              /* Normal mode: Save to Gallery + Regenerate */
+              <View style={styles.bottomButtonRow}>
+                <TouchableOpacity
+                  onPress={handleSaveAll}
+                  activeOpacity={0.8}
+                  style={[styles.saveButtonTouchable, { flex: 3 }]}
+                >
+                  <LinearGradient
+                    colors={['#D4AF37', '#B8860B']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.saveButton}
+                  >
+                    <Text style={styles.saveButtonText}>Save to Gallery</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleRegenerate}
+                  activeOpacity={0.8}
+                  style={[styles.regenGlassButton, { flex: 2 }]}
+                >
+                  <BlurView intensity={60} tint="light" style={styles.regenGlassBlur}>
+                    <RefreshIcon />
+                    <Text style={styles.regenGlassText}>Regenerate</Text>
+                  </BlurView>
+                </TouchableOpacity>
+              </View>
+            )}
           </Animated.View>
-        )}
+        </ScrollView>
+
       </SafeAreaView>
     </View>
   )
@@ -754,9 +791,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
-  },
-  scrollContentWithActionBar: {
-    paddingBottom: 120, // Extra space for action bar
   },
   header: {
     flexDirection: 'row',
@@ -958,31 +992,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#D4AF37',
     borderColor: '#D4AF37',
   },
-  // Bottom action bar for regeneration
-  regenActionBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+  // Bottom button row (side-by-side layout)
+  bottomButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'stretch',
   },
-  regenActionBarBlur: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+  // Glass-morphism Regenerate button (normal mode)
+  regenGlassButton: {
+    borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
-  regenActionBarContent: {
+  regenGlassBlur: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    paddingBottom: 32, // Extra padding for home indicator
+    justifyContent: 'center',
+    paddingVertical: 18,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    gap: 8,
   },
-  regenInfo: {
+  regenGlassText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  // Selection mode inline controls
+  regenInfoInline: {
     flex: 1,
+    justifyContent: 'center',
   },
   regenInfoText: {
     fontSize: 16,
@@ -994,7 +1034,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 2,
   },
-  regenButton: {
+  regenButtonInline: {
     borderRadius: 12,
     overflow: 'hidden',
     shadowColor: '#D4AF37',
@@ -1003,14 +1043,14 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-  regenButtonGradient: {
+  regenButtonGradientInline: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 14,
     gap: 8,
   },
-  regenButtonText: {
+  regenButtonTextInline: {
     fontSize: 16,
     fontWeight: '600',
     color: '#FFFFFF',
