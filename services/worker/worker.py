@@ -264,8 +264,7 @@ class Worker:
                 input_path=input_file_path,
                 prompt=job.prompt or "",  # Use empty string if no prompt
                 output_path=temp_output_path,
-                style_preset=style_preset,
-                tier=tier
+                tier=tier,
             )
             print(f"Image processor result: {result}")
 
