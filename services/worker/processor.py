@@ -6,12 +6,9 @@ This processor just validates, calls OpenAI, and writes the output.
 """
 
 import os
-import sys
 import logging
-from pathlib import Path
 from typing import Dict, Any
 
-sys.path.append(str(Path(__file__).parent.parent / "api"))
 from openai_client import LusterOpenAIClient
 
 logger = logging.getLogger(__name__)
