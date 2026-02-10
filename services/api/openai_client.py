@@ -63,6 +63,7 @@ class LusterOpenAIClient:
                             prompt=prompt,
                             size=size,
                             quality=quality,
+                            input_fidelity="high",
                             n=1,
                         )
 
