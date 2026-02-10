@@ -7,7 +7,7 @@ pydantic
 python-dotenv
 pillow
 pillow-heif
-openai>=1.0.0
+openai>=1.75.0
 requests>=2.31.0
 
 # Authentication (Supabase JWT)
